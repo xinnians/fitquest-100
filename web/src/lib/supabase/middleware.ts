@@ -40,7 +40,10 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/check-in") ||
     pathname.startsWith("/diet") ||
-    pathname.startsWith("/profile");
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/social") ||
+    pathname.startsWith("/challenges") ||
+    pathname.startsWith("/battles");
 
   // Not logged in → redirect to login (for protected routes & onboarding)
   if (!user && (isProtectedRoute || isOnboarding)) {

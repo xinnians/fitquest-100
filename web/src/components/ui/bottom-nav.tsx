@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "首頁", icon: "🏠" },
   { href: "/check-in", label: "打卡", icon: "➕" },
+  { href: "/social", label: "社交", icon: "👥" },
   { href: "/diet", label: "飲食", icon: "🍽️" },
   { href: "/profile", label: "我的", icon: "👤" },
 ] as const;

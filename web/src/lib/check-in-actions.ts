@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { calculateCaloriesBurned } from "shared/utils/calories";
+import { EXERCISE_TYPE_MAP } from "shared/constants/exercise-types";
 
 export async function createCheckIn(formData: FormData) {
   const supabase = await createClient();
@@ -46,6 +47,28 @@ export async function createCheckIn(formData: FormData) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  // Auto-create feed items for all challenges the user belongs to
+  const { data: memberships } = await supabase
+    .from("challenge_members")
+    .select("challenge_id")
+    .eq("user_id", user.id);
+
+  if (memberships && memberships.length > 0) {
+    const exerciseLabel = EXERCISE_TYPE_MAP.get(exerciseType)?.label ?? exerciseType;
+    const feedItems = memberships.map((m) => ({
+      user_id: user.id,
+      challenge_id: m.challenge_id,
+      type: "check_in",
+      content: {
+        exercise_type: exerciseType,
+        exercise_label: exerciseLabel,
+        duration_minutes: durationMinutes,
+        calories_burned: caloriesBurned,
+      },
+    }));
+    await supabase.from("feed_items").insert(feedItems);
   }
 
   return { success: true, data };

@@ -2,6 +2,9 @@
 export type { User } from "./types/user";
 export type { CheckIn, CheckInInput } from "./types/check-in";
 export type { Meal, MealInput } from "./types/meal";
+export type { Challenge, ChallengeMember, ChallengeWithMembers, LeaderboardEntry } from "./types/challenge";
+export type { Battle, BattleWithProfiles, BattleMetric, BattleStatus } from "./types/battle";
+export type { FeedItem, FeedItemWithUser, FeedType } from "./types/feed";
 
 // Constants
 export { EXERCISE_TYPES, EXERCISE_TYPE_MAP } from "./constants/exercise-types";
@@ -18,3 +21,4 @@ export type { MealType } from "./constants/nutrients";
 export { calculateCaloriesBurned } from "./utils/calories";
 export { calculateStreak } from "./utils/streak";
 export type { StreakResult } from "./utils/streak";
+export { generateInviteCode } from "./utils/invite-code";
