@@ -39,9 +39,9 @@ function LoginForm() {
           第三方登入失敗，請重試或使用 Email 登入
         </p>
       )}
-      {urlError === "line_not_configured" && (
+      {urlError && urlError.startsWith("line") && (
         <p className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
-          LINE 登入尚未設定，請使用其他方式登入
+          LINE 登入失敗，請重試或使用其他方式登入
         </p>
       )}
       {urlMessage === "password_reset_success" && (

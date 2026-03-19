@@ -126,25 +126,9 @@ export async function signInWithApple() {
 }
 
 export async function signInWithLINE() {
-  const supabase = await createClient();
   const baseUrl = await getBaseUrl();
-
-  // LINE uses Supabase custom OIDC provider (configured as "line" in Supabase Dashboard)
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "kakao" as "google", // placeholder — replace with actual LINE OIDC provider name when configured
-    options: {
-      redirectTo: `${baseUrl}/auth/callback`,
-      scopes: "profile openid email",
-    },
-  });
-
-  // For LINE, use custom OIDC approach if Supabase doesn't have built-in support:
-  // Redirect to LINE auth URL manually
-  if (error || !data.url) {
-    redirect("/login?error=line_not_configured");
-  }
-
-  redirect(data.url);
+  // LINE OAuth is handled by our own API route (not Supabase built-in)
+  redirect(`${baseUrl}/api/auth/line`);
 }
 
 // ── Sign Out ──
