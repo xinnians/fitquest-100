@@ -60,8 +60,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Check onboarding status for protected routes
-    if (isProtectedRoute) {
+    // Onboarding check — only on initial entry (dashboard), not every tab switch
+    if (pathname === "/dashboard") {
       const { data: profile } = await supabase
         .from("profiles")
         .select("onboarding_completed")
