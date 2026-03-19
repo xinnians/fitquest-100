@@ -46,12 +46,20 @@ export function SocialClient({ feed, challenges }: SocialClientProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="font-heading text-2xl font-extrabold">社交中心</h1>
-        <Link
-          href="/challenges"
-          className="rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
-        >
-          挑戰群組
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/battles"
+            className="rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            PK 對戰
+          </Link>
+          <Link
+            href="/challenges"
+            className="rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            挑戰群組
+          </Link>
+        </div>
       </div>
 
       {/* Content */}
