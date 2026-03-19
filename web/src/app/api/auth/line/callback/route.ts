@@ -12,64 +12,61 @@ function getSupabaseAdmin() {
 
 export async function GET(request: NextRequest) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-  const supabaseAdmin = getSupabaseAdmin();
 
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { searchParams } = new URL(request.url);
     const code = searchParams.get("code");
     const state = searchParams.get("state");
-    const error = searchParams.get("error");
+    const reqError = searchParams.get("error");
 
-    if (error) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_denied`);
+    if (reqError) {
+      return redirect(siteUrl, "line_denied", reqError);
     }
-
     if (!code || !state) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_missing_params`);
+      return redirect(siteUrl, "line_missing_params");
     }
 
-    // Verify state
+    // Verify CSRF state
     const cookieStore = await cookies();
     const savedState = cookieStore.get("line_oauth_state")?.value;
     if (state !== savedState) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_invalid_state`);
+      return redirect(siteUrl, "line_invalid_state");
     }
 
-    // Exchange code for tokens
-    const redirectUri = `${siteUrl}/api/auth/line/callback`;
+    // ── Step 1: Exchange code for LINE tokens ──
     const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri,
+        redirect_uri: `${siteUrl}/api/auth/line/callback`,
         client_id: process.env.LINE_CHANNEL_ID!,
         client_secret: process.env.LINE_CHANNEL_SECRET!,
       }),
     });
 
     if (!tokenRes.ok) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_token_failed`);
+      const body = await tokenRes.text();
+      return redirect(siteUrl, "line_token_failed", body);
     }
-
     const tokenData = await tokenRes.json();
 
-    // Get LINE user profile
+    // ── Step 2: Get LINE profile ──
     const profileRes = await fetch("https://api.line.me/v2/profile", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-
     if (!profileRes.ok) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_profile_failed`);
+      return redirect(siteUrl, "line_profile_failed");
     }
 
     const lineProfile = await profileRes.json();
-    const lineUserId = lineProfile.userId as string;
-    const displayName = lineProfile.displayName as string;
-    const pictureUrl = lineProfile.pictureUrl as string | undefined;
+    const lineUserId: string = lineProfile.userId;
+    const displayName: string = lineProfile.displayName;
+    const pictureUrl: string | undefined = lineProfile.pictureUrl;
 
-    // Try to get email from ID token
+    // Parse email from ID token (optional)
     let email: string | null = null;
     if (tokenData.id_token) {
       try {
@@ -77,69 +74,67 @@ export async function GET(request: NextRequest) {
           Buffer.from(tokenData.id_token.split(".")[1], "base64").toString()
         );
         email = payload.email ?? null;
-      } catch {
-        // continue without email
-      }
+      } catch { /* ignore */ }
     }
 
-    // Check if LINE user already exists
-    const { data: existingProfile } = await supabaseAdmin
+    const userEmail = email || `line.${lineUserId}@fitquest.app`;
+    const userPassword = `LP_${lineUserId}_${process.env.LINE_CHANNEL_SECRET!.slice(0, 8)}`;
+
+    // ── Step 3: Find or create user ──
+    let userId = "" as string;
+
+    // 3a: Check by line_user_id in profiles
+    const { data: profileByLine } = await supabaseAdmin
       .from("profiles")
       .select("id")
       .eq("line_user_id", lineUserId)
-      .single();
+      .maybeSingle();
 
-    let userId: string;
-    const userEmail = email || `line_${lineUserId}@fitquest.local`;
-    // Use a deterministic password derived from LINE user ID + secret
-    const userPassword = `line_${lineUserId}_${process.env.LINE_CHANNEL_SECRET}`;
+    if (profileByLine) {
+      userId = profileByLine.id;
+      // Ensure password is set for sign-in
+      await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+    }
 
-    if (existingProfile) {
-      userId = existingProfile.id;
-    } else {
-      // Create new user with email + password
+    // 3b: Check by email in profiles (user might exist from previous attempt without line_user_id)
+    if (userId === "") {
+      const { data: profileByEmail } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("email", userEmail)
+        .maybeSingle();
+
+      if (profileByEmail) {
+        userId = profileByEmail.id;
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+        await supabaseAdmin
+          .from("profiles")
+          .update({ line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null })
+          .eq("id", userId);
+      }
+    }
+
+    // 3c: Create new user if not found
+    if (userId === "") {
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: userEmail,
         password: userPassword,
         email_confirm: true,
-        user_metadata: {
-          name: displayName,
-          avatar_url: pictureUrl,
-          provider: "line",
-        },
+        user_metadata: { name: displayName, avatar_url: pictureUrl, provider: "line" },
       });
 
       if (createError || !newUser.user) {
-        // Email might already exist — try to update with LINE info
-        if (createError?.message?.includes("already")) {
-          const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-          const matched = users?.users?.find((u) => u.email === userEmail);
-          if (matched) {
-            userId = matched.id;
-            // Set the password so we can sign in
-            await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
-          } else {
-            return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed&detail=${encodeURIComponent("email_match_not_found")}`);
-          }
-        } else {
-          return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed&detail=${encodeURIComponent(createError?.message || "unknown")}`);
-        }
-      } else {
-        userId = newUser.user.id;
+        return redirect(siteUrl, "line_create_failed", createError?.message || "createUser returned null");
       }
 
-      // Update profile with LINE info
+      userId = newUser.user.id;
       await supabaseAdmin
         .from("profiles")
-        .update({
-          line_user_id: lineUserId,
-          nickname: displayName,
-          avatar_url: pictureUrl || null,
-        })
+        .update({ line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null })
         .eq("id", userId);
     }
 
-    // Sign in using SSR client (sets session cookies properly)
+    // ── Step 4: Sign in and set session cookies ──
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     const supabase = createServerClient(
@@ -165,15 +160,19 @@ export async function GET(request: NextRequest) {
     });
 
     if (signInError) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_session_failed&detail=${encodeURIComponent(signInError?.message || "unknown")}`);
+      return redirect(siteUrl, "line_session_failed", signInError.message);
     }
 
-    // Clean up state cookie
     response.cookies.delete("line_oauth_state");
-
     return response;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
-    return NextResponse.redirect(`${siteUrl}/login?error=line_unexpected&detail=${encodeURIComponent(msg)}`);
+    return redirect(siteUrl, "line_unexpected", msg);
   }
+}
+
+function redirect(siteUrl: string, error: string, detail?: string) {
+  const params = new URLSearchParams({ error });
+  if (detail) params.set("detail", detail);
+  return NextResponse.redirect(`${siteUrl}/login?${params.toString()}`);
 }
