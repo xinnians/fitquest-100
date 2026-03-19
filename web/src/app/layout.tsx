@@ -15,6 +15,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "FitQuest 100",
   description: "和朋友一起，開始你的 100 天運動冒險！",
+  metadataBase: new URL("https://fitquest100.vercel.app"),
 };
 
 export default function RootLayout({
