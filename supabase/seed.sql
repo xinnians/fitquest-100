@@ -1,0 +1,3 @@
+-- Seed data for local development
+-- Note: Auth users must be created through Supabase Auth, not directly
+-- This file is for reference data only
