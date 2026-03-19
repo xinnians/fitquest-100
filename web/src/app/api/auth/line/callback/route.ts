@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 function getSupabaseAdmin() {
@@ -33,7 +34,6 @@ export async function GET(request: NextRequest) {
     if (state !== savedState) {
       return NextResponse.redirect(`${siteUrl}/login?error=line_invalid_state`);
     }
-    cookieStore.delete("line_oauth_state");
 
     // Exchange code for tokens
     const redirectUri = `${siteUrl}/api/auth/line/callback`;
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     const displayName = lineProfile.displayName as string;
     const pictureUrl = lineProfile.pictureUrl as string | undefined;
 
-    // Try to get email from ID token (LINE may not always provide it)
+    // Try to get email from ID token
     let email: string | null = null;
     if (tokenData.id_token) {
       try {
@@ -78,11 +78,11 @@ export async function GET(request: NextRequest) {
         );
         email = payload.email ?? null;
       } catch {
-        // ID token parsing failed, continue without email
+        // continue without email
       }
     }
 
-    // Check if LINE user already exists in our profiles
+    // Check if LINE user already exists
     const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
       .select("id")
@@ -90,39 +90,34 @@ export async function GET(request: NextRequest) {
       .single();
 
     let userId: string;
+    const userEmail = email || `line_${lineUserId}@fitquest.local`;
+    // Use a deterministic password derived from LINE user ID + secret
+    const userPassword = `line_${lineUserId}_${process.env.LINE_CHANNEL_SECRET}`;
 
     if (existingProfile) {
-      // Existing user — sign them in
       userId = existingProfile.id;
     } else {
-      // New user — create Supabase auth user
-      const userEmail = email || `line_${lineUserId}@fitquest.local`;
+      // Create new user with email + password
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: userEmail,
+        password: userPassword,
         email_confirm: true,
         user_metadata: {
           name: displayName,
           avatar_url: pictureUrl,
           provider: "line",
-          line_user_id: lineUserId,
         },
       });
 
       if (createError || !newUser.user) {
-        // If email already exists, try to link LINE to existing account
-        if (createError?.message?.includes("already been registered")) {
-          const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
-          const matchedUser = existingUser?.users?.find((u) => u.email === userEmail);
-          if (matchedUser) {
-            userId = matchedUser.id;
-            // Update profile with LINE info
-            await supabaseAdmin
-              .from("profiles")
-              .update({
-                line_user_id: lineUserId,
-                avatar_url: pictureUrl || undefined,
-              })
-              .eq("id", userId);
+        // Email might already exist — try to update with LINE info
+        if (createError?.message?.includes("already")) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+          const matched = users?.users?.find((u) => u.email === userEmail);
+          if (matched) {
+            userId = matched.id;
+            // Set the password so we can sign in
+            await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
           } else {
             return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed`);
           }
@@ -131,39 +126,52 @@ export async function GET(request: NextRequest) {
         }
       } else {
         userId = newUser.user.id;
-        // Update the auto-created profile with LINE info
-        await supabaseAdmin
-          .from("profiles")
-          .update({
-            line_user_id: lineUserId,
-            nickname: displayName,
-            avatar_url: pictureUrl || null,
-          })
-          .eq("id", userId);
       }
+
+      // Update profile with LINE info
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          line_user_id: lineUserId,
+          nickname: displayName,
+          avatar_url: pictureUrl || null,
+        })
+        .eq("id", userId);
     }
 
-    // Generate a magic link to sign the user in
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: (await supabaseAdmin.auth.admin.getUserById(userId)).data.user?.email || "",
-      options: {
-        redirectTo: `${siteUrl}/dashboard`,
-      },
+    // Sign in using SSR client (sets session cookies properly)
+    const response = NextResponse.redirect(`${siteUrl}/dashboard`);
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          },
+        },
+      }
+    );
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: userPassword,
     });
 
-    if (linkError || !linkData) {
+    if (signInError) {
       return NextResponse.redirect(`${siteUrl}/login?error=line_session_failed`);
     }
 
-    // Extract the token from the magic link and redirect to auth/confirm
-    const linkUrl = new URL(linkData.properties.action_link);
-    const tokenHash = linkUrl.searchParams.get("token_hash") || linkUrl.hash;
+    // Clean up state cookie
+    response.cookies.delete("line_oauth_state");
 
-    // Redirect to Supabase's verify endpoint to establish session
-    const verifyUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/verify?token=${linkData.properties.hashed_token}&type=magiclink&redirect_to=${encodeURIComponent(`${siteUrl}/dashboard`)}`;
-
-    return NextResponse.redirect(verifyUrl);
+    return response;
   } catch {
     return NextResponse.redirect(`${siteUrl}/login?error=line_unexpected`);
   }
