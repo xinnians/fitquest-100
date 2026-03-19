@@ -119,10 +119,10 @@ export async function GET(request: NextRequest) {
             // Set the password so we can sign in
             await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
           } else {
-            return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed`);
+            return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed&detail=${encodeURIComponent("email_match_not_found")}`);
           }
         } else {
-          return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed`);
+          return NextResponse.redirect(`${siteUrl}/login?error=line_create_failed&detail=${encodeURIComponent(createError?.message || "unknown")}`);
         }
       } else {
         userId = newUser.user.id;
@@ -165,14 +165,15 @@ export async function GET(request: NextRequest) {
     });
 
     if (signInError) {
-      return NextResponse.redirect(`${siteUrl}/login?error=line_session_failed`);
+      return NextResponse.redirect(`${siteUrl}/login?error=line_session_failed&detail=${encodeURIComponent(signInError?.message || "unknown")}`);
     }
 
     // Clean up state cookie
     response.cookies.delete("line_oauth_state");
 
     return response;
-  } catch {
-    return NextResponse.redirect(`${siteUrl}/login?error=line_unexpected`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "unknown";
+    return NextResponse.redirect(`${siteUrl}/login?error=line_unexpected&detail=${encodeURIComponent(msg)}`);
   }
 }
