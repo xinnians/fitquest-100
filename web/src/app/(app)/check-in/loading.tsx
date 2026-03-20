@@ -10,7 +10,10 @@ export default function CheckInLoading() {
       <Skeleton className="mb-3 h-4 w-28" />
       <div className="grid grid-cols-3 gap-2">
         {Array.from({ length: 9 }).map((_, i) => (
-          <Skeleton key={i} className="h-20" />
+          <div key={i} className="glass-card p-3">
+            <Skeleton className="mx-auto h-8 w-8 rounded-full" />
+            <Skeleton className="mx-auto mt-2 h-3 w-12" />
+          </div>
         ))}
       </div>
 
@@ -18,12 +21,14 @@ export default function CheckInLoading() {
       <Skeleton className="mb-2 mt-6 h-4 w-32" />
       <div className="flex gap-2">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 flex-1" />
+          <div key={i} className="glass-card flex-1 py-3">
+            <Skeleton className="mx-auto h-4 w-8" />
+          </div>
         ))}
       </div>
 
       {/* Submit button */}
-      <Skeleton className="mt-6 h-14 w-full" />
+      <Skeleton className="mt-6 h-14 w-full rounded-xl" />
     </main>
   );
 }

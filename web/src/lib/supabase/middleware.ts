@@ -29,10 +29,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // Use getSession() instead of getUser() — reads JWT locally, no network call.
+  // Actual user validation happens in server components/actions via getUser().
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
+  const user = session?.user ?? null;
   const pathname = request.nextUrl.pathname;
   const isAuthPage = pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password" || pathname === "/reset-password";
   const isOnboarding = pathname === "/onboarding";
@@ -60,18 +63,32 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Onboarding check — only on initial entry (dashboard), not every tab switch
+    // Onboarding check — use cookie cache to avoid DB query on every dashboard visit
     if (pathname === "/dashboard") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("id", user.id)
-        .single();
+      const onboardedCookie = request.cookies.get("fq-onboarded");
 
-      if (profile && !profile.onboarding_completed) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/onboarding";
-        return NextResponse.redirect(url);
+      if (!onboardedCookie) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("onboarding_completed")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && !profile.onboarding_completed) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/onboarding";
+          return NextResponse.redirect(url);
+        }
+
+        // Cache onboarding status
+        if (profile?.onboarding_completed) {
+          supabaseResponse.cookies.set("fq-onboarded", "1", {
+            path: "/",
+            maxAge: 60 * 60 * 24 * 30, // 30 days
+            httpOnly: true,
+            sameSite: "lax",
+          });
+        }
       }
     }
   }

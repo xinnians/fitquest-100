@@ -3,26 +3,36 @@
 interface StreakDisplayProps {
   currentStreak: number;
   longestStreak: number;
+  totalDays?: number;
 }
 
-export function StreakDisplay({ currentStreak, longestStreak }: StreakDisplayProps) {
+export function StreakDisplay({ currentStreak, longestStreak, totalDays }: StreakDisplayProps) {
   return (
-    <div className="flex items-center gap-6">
-      <div className="flex items-center gap-2">
-        <span className="text-3xl">{currentStreak > 0 ? "🔥" : "💤"}</span>
+    <div>
+      <div className="flex items-center gap-4">
+        <span
+          className={`text-4xl ${currentStreak > 0 ? "animate-glow-pulse" : ""}`}
+        >
+          {currentStreak > 0 ? "🔥" : "💤"}
+        </span>
         <div>
-          <p className="font-heading text-2xl font-black text-foreground">
+          <p className="font-heading text-3xl font-black text-primary">
             {currentStreak}
           </p>
-          <p className="text-xs text-muted">連續天數</p>
+          <p className="text-sm text-muted">天連續打卡</p>
         </div>
       </div>
-      <div className="h-8 w-px bg-border" />
-      <div>
-        <p className="font-heading text-2xl font-black text-foreground">
-          {longestStreak}
-        </p>
-        <p className="text-xs text-muted">最長紀錄</p>
+      <div className="mt-4 flex gap-6 border-t border-white/5 pt-4">
+        <div>
+          <p className="font-heading text-lg font-bold">{longestStreak}</p>
+          <p className="text-xs text-muted">最長紀錄</p>
+        </div>
+        {totalDays !== undefined && (
+          <div>
+            <p className="font-heading text-lg font-bold">{totalDays}</p>
+            <p className="text-xs text-muted">總打卡天數</p>
+          </div>
+        )}
       </div>
     </div>
   );

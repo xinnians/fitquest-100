@@ -1,11 +1,8 @@
 "use client";
 
 interface WaffleChartProps {
-  /** Start date of the 100-day challenge */
   startDate: string;
-  /** Set of YYYY-MM-DD strings where check-in occurred */
   checkedInDates: Set<string>;
-  /** Total days in the challenge */
   totalDays?: number;
 }
 
@@ -19,7 +16,6 @@ export function WaffleChart({
   today.setHours(0, 0, 0, 0);
 
   const cols = 10;
-  const rows = Math.ceil(totalDays / cols);
 
   const cells = Array.from({ length: totalDays }, (_, i) => {
     const cellDate = new Date(start);
@@ -39,7 +35,7 @@ export function WaffleChart({
       <div className="mb-3 flex items-baseline justify-between">
         <h3 className="font-heading text-lg font-bold">100 天挑戰</h3>
         <span className="text-sm text-muted">
-          <span className="font-bold text-accent">{completedCount}</span> / {totalDays} 天
+          <span className="font-bold text-primary">{completedCount}</span> / {totalDays} 天
         </span>
       </div>
       <div
@@ -50,29 +46,29 @@ export function WaffleChart({
           <div
             key={cell.day}
             title={`Day ${cell.day} (${cell.dateStr})`}
-            className={`aspect-square rounded-sm text-[10px] flex items-center justify-center font-medium transition-colors ${
+            className={`aspect-square rounded-md text-[10px] flex items-center justify-center font-medium transition-all ${
               cell.isCheckedIn
-                ? "bg-accent text-white"
+                ? "bg-primary/30 border border-primary/40 text-primary"
                 : cell.isToday
-                  ? "bg-primary/20 text-primary border border-primary"
+                  ? "bg-accent/20 border border-accent/30 text-accent"
                   : cell.isPast
-                    ? "bg-destructive/15 text-destructive/50"
-                    : "bg-border/50 text-muted/50"
+                    ? "bg-white/[0.02] border border-white/[0.04] text-muted/40"
+                    : "bg-white/[0.02] border border-white/[0.04] text-muted/30"
             }`}
           >
             {cell.day}
           </div>
         ))}
       </div>
-      <div className="mt-2 flex items-center gap-4 text-xs text-muted">
+      <div className="mt-3 flex items-center gap-4 text-xs text-muted">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded-sm bg-accent" /> 已打卡
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-primary/30 border border-primary/40" /> 已打卡
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded-sm bg-destructive/15" /> 未打卡
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-accent/20 border border-accent/30" /> 今天
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded-sm bg-border/50" /> 未到
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-white/[0.02] border border-white/[0.04]" /> 未到
         </span>
       </div>
     </div>

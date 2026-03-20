@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-Hant" suppressHydrationWarning>
+    <html lang="zh-Hant" className="dark" suppressHydrationWarning>
       <body className={`${nunito.variable} ${dmSans.variable} antialiased`}>
         {children}
       </body>
