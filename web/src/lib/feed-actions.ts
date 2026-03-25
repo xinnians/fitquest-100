@@ -29,7 +29,7 @@ export async function getFeed(challengeId: string) {
   // Fetch feed items with profile info
   const { data: feedItems, error } = await supabase
     .from("feed_items")
-    .select("id, user_id, challenge_id, type, content, created_at, profiles(nickname, avatar_url)")
+    .select("id, user_id, challenge_id, type, content, created_at, profiles!feed_items_user_id_fkey(nickname, avatar_url)")
     .eq("challenge_id", challengeId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -173,8 +173,6 @@ export async function getMyFeed() {
     .select("challenge_id")
     .eq("user_id", user.id);
 
-  console.log("[getMyFeed] memberships:", memberships?.length ?? 0, "error:", memberError?.message);
-
   if (memberError) {
     return { error: memberError.message };
   }
@@ -188,12 +186,10 @@ export async function getMyFeed() {
   // Fetch feed items with profile info
   const { data: feedItems, error } = await supabase
     .from("feed_items")
-    .select("id, user_id, challenge_id, type, content, created_at, profiles(nickname, avatar_url)")
+    .select("id, user_id, challenge_id, type, content, created_at, profiles!feed_items_user_id_fkey(nickname, avatar_url)")
     .in("challenge_id", challengeIds)
     .order("created_at", { ascending: false })
     .limit(30);
-
-  console.log("[getMyFeed] feedItems:", feedItems?.length ?? 0, "error:", error?.message);
 
   if (error) {
     return { error: error.message };

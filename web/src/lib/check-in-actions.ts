@@ -51,12 +51,10 @@ export async function createCheckIn(formData: FormData) {
   }
 
   // Auto-create feed items for all challenges the user belongs to
-  const { data: memberships, error: memError } = await supabase
+  const { data: memberships } = await supabase
     .from("challenge_members")
     .select("challenge_id")
     .eq("user_id", user.id);
-
-  console.log("[createCheckIn] memberships:", memberships?.length ?? 0, "error:", memError?.message);
 
   if (memberships && memberships.length > 0) {
     const exerciseLabel = EXERCISE_TYPE_MAP.get(exerciseType)?.label ?? exerciseType;
@@ -71,8 +69,7 @@ export async function createCheckIn(formData: FormData) {
         calories_burned: caloriesBurned,
       },
     }));
-    const { error: feedError } = await supabase.from("feed_items").insert(feedItems);
-    console.log("[createCheckIn] feed insert:", feedItems.length, "items, error:", feedError?.message);
+    await supabase.from("feed_items").insert(feedItems);
 
     // Deal boss damage for each challenge
     await Promise.all(
