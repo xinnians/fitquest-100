@@ -51,7 +51,13 @@ Three client factories — use the right one:
 - `lib/supabase/server.ts` — Server client (Server Actions, server components)
 - `lib/supabase/middleware.ts` — Middleware client (session refresh in `middleware.ts`)
 
-All tables use Row-Level Security (RLS). For admin operations (e.g., LINE auth user creation), use `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS.
+All tables use Row-Level Security (RLS). For admin operations (e.g., LINE auth user creation, boss battle creation), use `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS.
+
+**RLS Critical Rules:**
+- **NEVER** self-reference a table in its own RLS policy subquery — PostgreSQL will infinite-recurse. Use a `SECURITY DEFINER` function instead.
+- Two helper functions exist for cross-user RLS: `get_my_challenge_ids()` and `get_my_challenge_peer_ids()` (both `SECURITY DEFINER`, defined in migration 007). Use these in RLS policies instead of subquerying `challenge_members` directly.
+- When PostgREST detects multiple FK relationships for a join, specify the FK explicitly: e.g., `profiles!feed_items_user_id_fkey(nickname, avatar_url)`.
+- **Migrations are NOT auto-applied** to production Supabase when deploying to Vercel. Run new migrations manually via Supabase Dashboard SQL Editor or `supabase db push`.
 
 ### Authentication
 
@@ -62,11 +68,16 @@ Three providers: **LINE** (custom OAuth via API route), **Google** (Supabase-man
 ### Performance Patterns
 
 - Dashboard uses granular separate queries (`getHeaderData()`, `getStreakData()`, `getCalorieData()`, etc.) for parallel loading with Suspense
-- Check-in creation auto-creates feed items for all user's challenges (no separate publish step)
+- Check-in creation auto-creates feed items for all user's challenges (no separate publish step), and deals boss damage
+- Server Actions that mutate data should call `revalidatePath()` to bust Next.js client-side router cache
 
 ### Character System
 
 20 static characters in `web/src/lib/characters.ts` (not DB-backed). Each has id, name, emoji, sport, color, imagePath. Use `getCharacter(id)` / `getCharacterOrDefault(id)` (defaults to Flamey).
+
+### Boss Battle System
+
+10 static bosses in `web/src/lib/bosses.ts` (not DB-backed). `getBossForWeek(date)` deterministically selects a boss per week. Boss battles are DB-backed (`boss_battles`, `boss_damage_log` tables). Boss HP = team members × 2000 calories. Bosses are lazily created on first access each week (no cron needed). Server actions in `web/src/lib/boss-battle-actions.ts`. Admin client (service role) used for boss creation/settlement to bypass RLS.
 
 ### Offline Support
 
@@ -74,7 +85,7 @@ Check-ins support offline queuing via IndexedDB (`idb-keyval`). See `lib/offline
 
 ### Database
 
-5 migrations in `supabase/migrations/`. Key tables: `profiles`, `check_ins`, `meals`, `challenges`, `challenge_members`, `battles`, `feed_items`. A `handle_new_user()` trigger auto-creates a profile row on signup. Index: `idx_check_ins_user_date` on (user_id, checked_in_at).
+7 migrations in `supabase/migrations/`. Key tables: `profiles`, `check_ins`, `meals`, `challenges`, `challenge_members`, `battles`, `feed_items`, `feed_likes`, `boss_battles`, `boss_damage_log`, `notification_preferences`, `notification_log`. A `handle_new_user()` trigger auto-creates a profile row on signup. Index: `idx_check_ins_user_date` on (user_id, checked_in_at). Two `SECURITY DEFINER` helper functions: `get_my_challenge_ids()`, `get_my_challenge_peer_ids()` (migration 007).
 
 ## Design System
 
