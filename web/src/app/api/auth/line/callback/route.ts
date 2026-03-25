@@ -138,15 +138,37 @@ export async function GET(request: NextRequest) {
         user_metadata: { name: displayName, avatar_url: pictureUrl, provider: "line" },
       });
 
-      if (createError || !newUser.user) {
-        return redirect(siteUrl, "line_create_failed", createError?.message || "createUser returned null");
+      if (createError) {
+        // User exists in auth.users but wasn't found via profiles lookup
+        // Find existing auth user and link LINE identity
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = listData?.users?.find((u) => u.email === userEmail);
+        if (existingUser) {
+          userId = existingUser.id;
+          const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+          if (pwError) {
+            return redirect(siteUrl, "line_password_update_failed", pwError.message);
+          }
+          userEmail = existingUser.email!;
+          // Sync profile with LINE data
+          await supabaseAdmin
+            .from("profiles")
+            .upsert(
+              { id: userId, email: userEmail, line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null },
+              { onConflict: "id" }
+            );
+        } else {
+          return redirect(siteUrl, "line_create_failed", createError.message);
+        }
+      } else if (!newUser.user) {
+        return redirect(siteUrl, "line_create_failed", "createUser returned null");
+      } else {
+        userId = newUser.user.id;
+        await supabaseAdmin
+          .from("profiles")
+          .update({ line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null })
+          .eq("id", userId);
       }
-
-      userId = newUser.user.id;
-      await supabaseAdmin
-        .from("profiles")
-        .update({ line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null })
-        .eq("id", userId);
     }
 
     // ── Step 4: Sign in and set session cookies ──
