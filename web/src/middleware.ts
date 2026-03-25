@@ -14,6 +14,8 @@ export const config = {
     "/social/:path*",
     "/challenges/:path*",
     "/battles/:path*",
+    "/games/:path*",
+    "/shop/:path*",
     "/onboarding",
     "/login",
     "/signup",

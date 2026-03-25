@@ -132,6 +132,26 @@ export default async function DashboardPage() {
         <Suspense fallback={<ChartSkeleton />}>
           <WeeklySection />
         </Suspense>
+
+        {/* Quick Links */}
+        <div className="grid grid-cols-2 gap-3 animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+          <Link
+            href="/games"
+            className="rounded-xl border border-border bg-card p-4 shadow-card transition-all hover:shadow-lg"
+          >
+            <span className="text-2xl">🎰</span>
+            <p className="mt-1 font-heading text-sm font-bold">小遊戲</p>
+            <p className="text-[11px] text-muted">每日轉盤 & 猜猜熱量</p>
+          </Link>
+          <Link
+            href="/shop"
+            className="rounded-xl border border-border bg-card p-4 shadow-card transition-all hover:shadow-lg"
+          >
+            <span className="text-2xl">🛒</span>
+            <p className="mt-1 font-heading text-sm font-bold">獎勵商店</p>
+            <p className="text-[11px] text-muted">用金幣兌換道具</p>
+          </Link>
+        </div>
       </div>
     </main>
   );
