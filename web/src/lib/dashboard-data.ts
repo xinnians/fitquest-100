@@ -13,7 +13,7 @@ export async function getHeaderData() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("nickname, daily_calorie_goal, timezone, created_at")
+    .select("nickname, daily_calorie_goal, timezone, created_at, character_id")
     .eq("id", user.id)
     .single();
 
@@ -34,6 +34,7 @@ export async function getHeaderData() {
     dailyCalorieGoal: profile?.daily_calorie_goal ?? 2000,
     timezone: profile?.timezone ?? "Asia/Taipei",
     challengeStartDate: profile?.created_at?.split("T")[0] ?? new Date().toLocaleDateString("en-CA"),
+    characterId: profile?.character_id ?? "flamey",
   };
 }
 

@@ -11,6 +11,7 @@ import { StreakDisplay } from "@/components/features/streak-display";
 import { CalorieGauge } from "@/components/features/calorie-gauge";
 import { WaffleChart } from "@/components/features/waffle-chart";
 import { WeeklyChart } from "@/components/features/weekly-chart";
+import { CharacterAvatar } from "@/components/features/character-avatar";
 import { CardSkeleton, GaugeSkeleton, ChartSkeleton } from "@/components/ui/skeleton";
 
 async function StreakSection() {
@@ -86,6 +87,9 @@ export default async function DashboardPage() {
               : "今天還沒打卡喔！"}
           </p>
         </div>
+        <Link href="/characters">
+          <CharacterAvatar characterId={header.characterId} size={48} />
+        </Link>
       </div>
 
       {/* Quick Check-in CTA */}

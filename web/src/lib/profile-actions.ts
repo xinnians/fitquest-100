@@ -46,6 +46,23 @@ export async function updateProfile(formData: FormData) {
   return { success: true };
 }
 
+export async function updateCharacter(characterId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "請先登入" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ character_id: characterId })
+    .eq("id", user.id);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function addWeightRecord(formData: FormData) {
   const supabase = await createClient();
   const {
