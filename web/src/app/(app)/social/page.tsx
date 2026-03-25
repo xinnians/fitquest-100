@@ -1,5 +1,6 @@
 import { getMyFeed } from "@/lib/feed-actions";
 import { getMyChallenges } from "@/lib/challenge-actions";
+import { getCurrentBossBattle } from "@/lib/boss-battle-actions";
 import { SocialClient } from "./social-client";
 
 export default async function SocialPage() {
@@ -18,9 +19,37 @@ export default async function SocialPage() {
     end_date: c.end_date ?? "",
   }));
 
+  // Fetch active boss for each challenge (in parallel)
+  const bossResults = await Promise.all(
+    challenges.map(async (c) => {
+      try {
+        const result = await getCurrentBossBattle(c.id);
+        if ("data" in result && result.data) {
+          return {
+            challengeId: c.id,
+            bossName: result.data.boss_name,
+            bossEmoji: result.data.boss_emoji,
+            currentHp: result.data.current_hp,
+            maxHp: result.data.max_hp,
+            status: result.data.status as "active" | "defeated" | "expired",
+            daysRemaining: result.data.days_remaining,
+            hoursRemaining: result.data.hours_remaining,
+          };
+        }
+      } catch {
+        // Skip if boss fetch fails
+      }
+      return null;
+    })
+  );
+
+  const activeBosses = bossResults.filter(
+    (b): b is NonNullable<typeof b> => b !== null && (b.status === "active" || b.status === "defeated")
+  );
+
   return (
     <main className="mx-auto max-w-md px-4 pb-8 pt-8">
-      <SocialClient feed={feed} challenges={challenges} />
+      <SocialClient feed={feed} challenges={challenges} activeBosses={activeBosses} />
     </main>
   );
 }

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { InviteCodeDisplay } from "@/components/features/invite-code-display";
 import { Leaderboard } from "@/components/features/leaderboard";
 import { FeedCard } from "@/components/features/feed-card";
+import { BossBattleCard } from "@/components/features/boss-battle-card";
 import { toggleLike } from "@/lib/feed-actions";
 import { getChallengeLeaderboard } from "@/lib/challenge-actions";
 import type { LeaderboardRange } from "shared/types/challenge";
@@ -48,11 +50,22 @@ interface FeedItem {
   is_liked: boolean;
 }
 
+interface BossData {
+  boss_name: string;
+  boss_emoji: string;
+  current_hp: number;
+  max_hp: number;
+  status: string;
+  days_remaining: number;
+  hours_remaining: number;
+}
+
 interface DetailClientProps {
   challenge: Challenge;
   challengeId: string;
   leaderboard: LeaderboardEntry[];
   feed: FeedItem[];
+  boss?: BossData | null;
 }
 
 type Tab = "leaderboard" | "feed";
@@ -62,6 +75,7 @@ export function DetailClient({
   challengeId,
   leaderboard,
   feed,
+  boss,
 }: DetailClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("leaderboard");
@@ -95,6 +109,22 @@ export function DetailClient({
         <p className="mb-2 text-sm font-medium text-muted">邀請碼</p>
         <InviteCodeDisplay code={challenge.invite_code} />
       </section>
+
+      {/* Boss Battle */}
+      {boss && (boss.status === "active" || boss.status === "defeated") && (
+        <section className="mt-4">
+          <BossBattleCard
+            challengeId={challengeId}
+            bossName={boss.boss_name}
+            bossEmoji={boss.boss_emoji}
+            currentHp={boss.current_hp}
+            maxHp={boss.max_hp}
+            status={boss.status as "active" | "defeated" | "expired"}
+            daysRemaining={boss.days_remaining}
+            hoursRemaining={boss.hours_remaining}
+          />
+        </section>
+      )}
 
       {/* Members */}
       <section className="mt-6 rounded-xl border border-border bg-card p-5 shadow-card">

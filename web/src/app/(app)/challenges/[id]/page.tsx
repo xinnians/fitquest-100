@@ -3,6 +3,7 @@ import {
   getChallengeLeaderboard,
 } from "@/lib/challenge-actions";
 import { getFeed } from "@/lib/feed-actions";
+import { getCurrentBossBattle } from "@/lib/boss-battle-actions";
 import { DetailClient } from "./detail-client";
 
 export default async function ChallengeDetailPage({
@@ -12,10 +13,11 @@ export default async function ChallengeDetailPage({
 }) {
   const { id: challengeId } = await params;
 
-  const [detailResult, leaderboardResult, feedResult] = await Promise.all([
+  const [detailResult, leaderboardResult, feedResult, bossResult] = await Promise.all([
     getChallengeDetail(challengeId),
     getChallengeLeaderboard(challengeId),
     getFeed(challengeId),
+    getCurrentBossBattle(challengeId).catch(() => null),
   ]);
 
   if (!detailResult || "error" in detailResult) {
@@ -36,6 +38,8 @@ export default async function ChallengeDetailPage({
   const feed =
     feedResult && "data" in feedResult ? feedResult.data ?? [] : [];
 
+  const boss = bossResult && "data" in bossResult ? bossResult.data : null;
+
   return (
     <main className="mx-auto max-w-md px-4 pb-8 pt-8">
       <DetailClient
@@ -43,6 +47,7 @@ export default async function ChallengeDetailPage({
         challengeId={challengeId}
         leaderboard={leaderboard}
         feed={feed}
+        boss={boss}
       />
     </main>
   );

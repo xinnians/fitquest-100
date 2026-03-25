@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calculateCaloriesBurned } from "shared/utils/calories";
 import { EXERCISE_TYPE_MAP } from "shared/constants/exercise-types";
+import { dealBossDamage } from "@/lib/boss-battle-actions";
 
 export async function createCheckIn(formData: FormData) {
   const supabase = await createClient();
@@ -69,6 +70,13 @@ export async function createCheckIn(formData: FormData) {
       },
     }));
     await supabase.from("feed_items").insert(feedItems);
+
+    // Deal boss damage for each challenge
+    await Promise.all(
+      memberships.map((m) =>
+        dealBossDamage(data.id, m.challenge_id, caloriesBurned)
+      )
+    );
   }
 
   return { success: true, data };

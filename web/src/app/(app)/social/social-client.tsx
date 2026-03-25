@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FeedCard } from "@/components/features/feed-card";
+import { BossBattleCard } from "@/components/features/boss-battle-card";
 import { toggleLike } from "@/lib/feed-actions";
 
 interface FeedItem {
@@ -26,12 +27,24 @@ interface Challenge {
   end_date: string;
 }
 
+interface ActiveBoss {
+  challengeId: string;
+  bossName: string;
+  bossEmoji: string;
+  currentHp: number;
+  maxHp: number;
+  status: "active" | "defeated" | "expired";
+  daysRemaining: number;
+  hoursRemaining: number;
+}
+
 interface SocialClientProps {
   feed: FeedItem[];
   challenges: Challenge[];
+  activeBosses?: ActiveBoss[];
 }
 
-export function SocialClient({ feed, challenges }: SocialClientProps) {
+export function SocialClient({ feed, challenges, activeBosses = [] }: SocialClientProps) {
   const router = useRouter();
 
   async function handleToggleLike(feedItemId: string) {
@@ -78,6 +91,25 @@ export function SocialClient({ feed, challenges }: SocialClientProps) {
         </section>
       ) : (
         <div className="mt-6 space-y-4">
+          {/* Active Boss Battles */}
+          {activeBosses.length > 0 && (
+            <div className="space-y-3">
+              {activeBosses.map((boss) => (
+                <BossBattleCard
+                  key={boss.challengeId}
+                  challengeId={boss.challengeId}
+                  bossName={boss.bossName}
+                  bossEmoji={boss.bossEmoji}
+                  currentHp={boss.currentHp}
+                  maxHp={boss.maxHp}
+                  status={boss.status}
+                  daysRemaining={boss.daysRemaining}
+                  hoursRemaining={boss.hoursRemaining}
+                />
+              ))}
+            </div>
+          )}
+
           {feed.length === 0 ? (
             <section className="rounded-xl border border-border bg-card p-8 text-center shadow-card">
               <p className="text-sm text-muted">還沒有任何動態，去打卡吧！</p>
