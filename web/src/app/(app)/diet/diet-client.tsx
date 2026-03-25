@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import { MEAL_TYPES } from "shared/constants/nutrients";
 import { createMeal, deleteMeal } from "@/lib/meal-actions";
 import { searchFood, type FoodSearchResult } from "@/lib/food-search";
@@ -41,13 +41,32 @@ export function DietClient({ initialMeals }: { initialMeals: Meal[] }) {
   const totalCarbs = initialMeals.reduce((sum, m) => sum + (m.carbs_g ?? 0), 0);
   const totalFat = initialMeals.reduce((sum, m) => sum + (m.fat_g ?? 0), 0);
 
-  async function handleSearch() {
-    if (searchQuery.length < 2) return;
+  // Debounced autocomplete
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const doSearch = useCallback(async (query: string) => {
+    if (query.length < 1) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
     setIsSearching(true);
-    const results = await searchFood(searchQuery);
+    const results = await searchFood(query);
     setSearchResults(results);
     setIsSearching(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!searchQuery) {
+      setSearchResults([]);
+      return;
+    }
+    debounceRef.current = setTimeout(() => doSearch(searchQuery), 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery, doSearch]);
 
   function selectFood(food: FoodSearchResult) {
     setFoodName(food.name);
@@ -127,26 +146,26 @@ export function DietClient({ initialMeals }: { initialMeals: Meal[] }) {
             ))}
           </div>
 
-          {/* Food Search */}
+          {/* Food Search — debounced autocomplete */}
           <div className="mb-4">
-            <div className="flex gap-2">
+            <div className="relative">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
-                className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                placeholder="搜尋食物（英文效果較佳）"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                placeholder="搜尋食物名稱..."
               />
-              <button
-                type="button"
-                onClick={handleSearch}
-                disabled={isSearching}
-                className="rounded-xl bg-info px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-info/90"
-              >
-                {isSearching ? "..." : "搜尋"}
-              </button>
+              {isSearching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">
+                  搜尋中...
+                </span>
+              )}
             </div>
+
+            {searchQuery.length > 0 && !isSearching && searchResults.length === 0 && (
+              <p className="mt-2 text-center text-xs text-muted">找不到結果，請手動輸入</p>
+            )}
 
             {searchResults.length > 0 && (
               <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border">
@@ -157,9 +176,17 @@ export function DietClient({ initialMeals }: { initialMeals: Meal[] }) {
                     onClick={() => selectFood(food)}
                     className="w-full border-b border-border px-3 py-2 text-left text-sm last:border-0 hover:bg-background"
                   >
-                    <p className="font-medium">{food.name}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{food.name}</p>
+                      {food.source === "local" && (
+                        <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                          台灣
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted">
                       {food.calories} kcal · P{food.protein_g}g · C{food.carbs_g}g · F{food.fat_g}g
+                      <span className="ml-1 text-muted/70">({food.serving_size})</span>
                     </p>
                   </button>
                 ))}

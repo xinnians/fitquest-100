@@ -7,11 +7,13 @@ import {
   getWaffleData,
   getWeeklyData,
 } from "@/lib/dashboard-data";
+import { getPlayerStats } from "@/lib/reward-actions";
 import { StreakDisplay } from "@/components/features/streak-display";
 import { CalorieGauge } from "@/components/features/calorie-gauge";
 import { WaffleChart } from "@/components/features/waffle-chart";
 import { WeeklyChart } from "@/components/features/weekly-chart";
 import { CharacterAvatar } from "@/components/features/character-avatar";
+import { XpBar } from "@/components/features/xp-bar";
 import { CardSkeleton, GaugeSkeleton, ChartSkeleton } from "@/components/ui/skeleton";
 
 async function StreakSection() {
@@ -62,6 +64,16 @@ async function WeeklySection() {
   );
 }
 
+async function XpSection() {
+  const stats = await getPlayerStats();
+  if (!stats) return null;
+  return (
+    <section className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+      <XpBar xp={stats.xp} level={stats.level} coins={stats.coins} />
+    </section>
+  );
+}
+
 export default async function DashboardPage() {
   const header = await getHeaderData();
 
@@ -105,6 +117,9 @@ export default async function DashboardPage() {
       )}
 
       <div className="mt-6 space-y-4">
+        <Suspense fallback={<CardSkeleton />}>
+          <XpSection />
+        </Suspense>
         <Suspense fallback={<CardSkeleton />}>
           <StreakSection />
         </Suspense>

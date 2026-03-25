@@ -12,6 +12,9 @@ export default function CheckInPage() {
   const [notes, setNotes] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastCalories, setLastCalories] = useState(0);
+  const [lastReward, setLastReward] = useState<{
+    xp: number; coins: number; leveledUp: boolean; newLevel: number;
+  } | null>(null);
 
   const estimatedCalories =
     selectedType && duration
@@ -23,6 +26,7 @@ export default function CheckInPage() {
       const result = await createCheckIn(formData);
       if (result && "success" in result) {
         setLastCalories(result.data?.calories_burned ?? estimatedCalories);
+        setLastReward(result.reward ?? null);
         setShowSuccess(true);
         setSelectedType("");
         setDuration("");
@@ -38,6 +42,7 @@ export default function CheckInPage() {
     return (
       <CheckInSuccess
         calories={lastCalories}
+        reward={lastReward}
         onClose={() => setShowSuccess(false)}
       />
     );

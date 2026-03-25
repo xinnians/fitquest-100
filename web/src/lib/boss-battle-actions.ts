@@ -3,6 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getBossForWeek } from "@/lib/bosses";
+import { grantReward } from "@/lib/reward-actions";
+import { REWARDS } from "shared/constants/rewards";
+import { checkAchievements } from "@/lib/achievement-actions";
 
 function getSupabaseAdmin() {
   return createSupabaseClient(
@@ -242,7 +245,21 @@ export async function dealBossDamage(
       .eq("id", boss.id)
       .eq("status", "active"); // idempotent guard
 
-    // TODO: grantBossReward(challengeId, 500, 50) — when XP system is built
+    // Grant boss defeat reward to all challenge members
+    const { data: members } = await admin
+      .from("challenge_members")
+      .select("user_id")
+      .eq("challenge_id", challengeId);
+
+    if (members) {
+      await Promise.all(
+        members.map((m) =>
+          grantReward(m.user_id, REWARDS.BOSS_DEFEAT.xp, REWARDS.BOSS_DEFEAT.coins)
+        )
+      );
+      // Check boss-related achievements for all members
+      members.forEach((m) => checkAchievements(m.user_id, "boss_defeat"));
+    }
   } else {
     await admin
       .from("boss_battles")

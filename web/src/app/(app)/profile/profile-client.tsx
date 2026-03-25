@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { updateProfile, addWeightRecord } from "@/lib/profile-actions";
 import { signOut } from "@/lib/auth-actions";
 import {
@@ -255,8 +256,32 @@ export function ProfileClient({
         )}
       </section>
 
+      {/* Quick Links */}
+      <div className="mt-6 space-y-2">
+        <Link
+          href="/profile/achievements"
+          className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-background"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🏆</span>
+            <span className="text-sm font-medium">成就徽章</span>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+        <Link
+          href="/profile/notifications"
+          className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-background"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🔔</span>
+            <span className="text-sm font-medium">通知設定</span>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      </div>
+
       {/* Sign Out */}
-      <form action={signOut} className="mt-6">
+      <form action={signOut} className="mt-4">
         <button
           type="submit"
           className="w-full rounded-xl border border-destructive px-4 py-3 font-medium text-destructive transition-colors hover:bg-destructive/10"

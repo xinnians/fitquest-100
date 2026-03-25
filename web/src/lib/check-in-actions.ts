@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateCaloriesBurned } from "shared/utils/calories";
 import { EXERCISE_TYPE_MAP } from "shared/constants/exercise-types";
 import { dealBossDamage } from "@/lib/boss-battle-actions";
+import { grantReward, getCurrentStreak } from "@/lib/reward-actions";
+import { REWARDS } from "shared/constants/rewards";
+import { createNotificationBatch } from "@/lib/notification-actions";
+import { checkAchievements } from "@/lib/achievement-actions";
 
 export async function createCheckIn(formData: FormData) {
   const supabase = await createClient();
@@ -24,10 +28,10 @@ export async function createCheckIn(formData: FormData) {
     return { error: "請填寫完整的運動資訊" };
   }
 
-  // Get user weight for calorie calculation
+  // Get user profile for calorie calculation and notifications
   const { data: profile } = await supabase
     .from("profiles")
-    .select("weight_kg")
+    .select("weight_kg, nickname")
     .eq("id", user.id)
     .single();
 
@@ -77,9 +81,40 @@ export async function createCheckIn(formData: FormData) {
         dealBossDamage(data.id, m.challenge_id, caloriesBurned)
       )
     );
+
+    // Notify challenge peers about this check-in
+    const nickname = profile?.nickname ?? "冒險者";
+    const { data: peers } = await supabase
+      .from("challenge_members")
+      .select("user_id")
+      .in("challenge_id", memberships.map((m) => m.challenge_id))
+      .neq("user_id", user.id);
+
+    if (peers && peers.length > 0) {
+      const peerIds = [...new Set(peers.map((p) => p.user_id))];
+      const exerciseLabel = EXERCISE_TYPE_MAP.get(exerciseType)?.label ?? exerciseType;
+      createNotificationBatch(
+        peerIds,
+        "friend_checked_in",
+        `${nickname} 完成打卡！`,
+        `${exerciseLabel} ${durationMinutes} 分鐘，消耗 ${caloriesBurned} kcal`
+      );
+    }
   }
 
-  return { success: true, data };
+  // Grant XP and coins for check-in
+  const streak = await getCurrentStreak(user.id);
+  const reward = await grantReward(
+    user.id,
+    REWARDS.CHECK_IN.xp,
+    REWARDS.CHECK_IN.coins,
+    streak
+  );
+
+  // Check achievements (non-blocking)
+  checkAchievements(user.id, "check_in");
+
+  return { success: true, data, reward };
 }
 
 export async function getTodayCheckIns() {

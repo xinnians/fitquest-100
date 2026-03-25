@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { grantReward } from "@/lib/reward-actions";
+import { REWARDS } from "shared/constants/rewards";
 
 export async function createMeal(formData: FormData) {
   const supabase = await createClient();
@@ -38,7 +40,10 @@ export async function createMeal(formData: FormData) {
     return { error: error.message };
   }
 
-  return { success: true };
+  // Grant XP and coins for meal logging
+  const reward = await grantReward(user.id, REWARDS.MEAL_LOG.xp, REWARDS.MEAL_LOG.coins);
+
+  return { success: true, reward };
 }
 
 export async function getTodayMeals() {

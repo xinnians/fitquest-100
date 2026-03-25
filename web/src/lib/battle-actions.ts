@@ -2,6 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { BattleStats } from "shared/types/battle";
+import { grantReward } from "@/lib/reward-actions";
+import { REWARDS } from "shared/constants/rewards";
+import { createNotification } from "@/lib/notification-actions";
+import { checkAchievements } from "@/lib/achievement-actions";
 
 // Helper: get today's date string in YYYY-MM-DD (Asia/Taipei)
 function getTodayDateString(): string {
@@ -112,7 +116,11 @@ async function completeBattleIfExpired(
     });
   }
 
-  // TODO: grantBattleReward(winnerId, 300, 30) — when XP system is built
+  // Grant XP and coins to the winner
+  if (winnerId) {
+    await grantReward(winnerId, REWARDS.PK_WIN.xp, REWARDS.PK_WIN.coins);
+    checkAchievements(winnerId, "battle_win");
+  }
 
   return { winnerId, challengerScore, opponentScore };
 }
@@ -166,6 +174,22 @@ export async function createBattle(formData: FormData) {
   if (error) {
     return { error: error.message };
   }
+
+  // Notify opponent about the PK invite
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("nickname")
+    .eq("id", user.id)
+    .single();
+
+  const nickname = profile?.nickname ?? "冒險者";
+  const metricLabel = metric === "check_ins" ? "打卡次數" : "消耗卡路里";
+  createNotification(
+    opponentId,
+    "pk_invite",
+    `${nickname} 向你發起 PK！`,
+    `比拼 7 天${metricLabel}${stakeDescription ? `，賭注：${stakeDescription}` : ""}`
+  );
 
   return { success: true, data };
 }

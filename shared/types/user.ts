@@ -8,5 +8,8 @@ export interface User {
   daily_calorie_goal: number;
   timezone: string;
   onboarding_completed: boolean;
+  xp: number;
+  level: number;
+  coins: number;
   created_at: string;
 }

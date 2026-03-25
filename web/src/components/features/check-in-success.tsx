@@ -4,10 +4,11 @@ import Link from "next/link";
 
 interface CheckInSuccessProps {
   calories: number;
+  reward?: { xp: number; coins: number; leveledUp: boolean; newLevel: number } | null;
   onClose: () => void;
 }
 
-export function CheckInSuccess({ calories, onClose }: CheckInSuccessProps) {
+export function CheckInSuccess({ calories, reward, onClose }: CheckInSuccessProps) {
   return (
     <main className="flex min-h-[80vh] flex-col items-center justify-center px-4">
       <div className="text-center">
@@ -32,6 +33,23 @@ export function CheckInSuccess({ calories, onClose }: CheckInSuccessProps) {
             <span className="ml-1 text-base font-normal text-muted">kcal</span>
           </p>
         </div>
+        {reward && (
+          <div className="mt-3 flex items-center justify-center gap-3 animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">
+              +{reward.xp} XP
+            </span>
+            <span className="rounded-full bg-yellow-500/10 px-3 py-1 text-sm font-bold text-yellow-600 dark:text-yellow-400">
+              +{reward.coins} 🪙
+            </span>
+          </div>
+        )}
+        {reward?.leveledUp && (
+          <div className="mt-2 animate-glow-pulse text-center animate-fade-in-up" style={{ animationDelay: "500ms" }}>
+            <p className="text-sm font-bold text-primary">
+              🎉 升級到 Lv.{reward.newLevel}！
+            </p>
+          </div>
+        )}
         <div className="mt-8 flex flex-col gap-3 animate-fade-in-up" style={{ animationDelay: "450ms" }}>
           <Link
             href="/dashboard"

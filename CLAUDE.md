@@ -85,7 +85,23 @@ Check-ins support offline queuing via IndexedDB (`idb-keyval`). See `lib/offline
 
 ### Database
 
-7 migrations in `supabase/migrations/`. Key tables: `profiles`, `check_ins`, `meals`, `challenges`, `challenge_members`, `battles`, `feed_items`, `feed_likes`, `boss_battles`, `boss_damage_log`, `notification_preferences`, `notification_log`. A `handle_new_user()` trigger auto-creates a profile row on signup. Index: `idx_check_ins_user_date` on (user_id, checked_in_at). Two `SECURITY DEFINER` helper functions: `get_my_challenge_ids()`, `get_my_challenge_peer_ids()` (migration 007).
+9 migrations in `supabase/migrations/`. Key tables: `profiles`, `check_ins`, `meals`, `challenges`, `challenge_members`, `battles`, `feed_items`, `feed_likes`, `boss_battles`, `boss_damage_log`, `notification_preferences`, `notification_log`, `user_achievements`, `purchases`. A `handle_new_user()` trigger auto-creates a profile row on signup. Index: `idx_check_ins_user_date` on (user_id, checked_in_at). Three `SECURITY DEFINER` helper functions: `get_my_challenge_ids()`, `get_my_challenge_peer_ids()` (migration 007), `grant_reward()` (migration 008).
+
+### Gamification System
+
+Profiles have `xp`, `level`, `coins` columns. `grant_reward()` DB function atomically increments XP/coins. Level thresholds: `500 * 1.6^(level-1)`. Reward constants in `shared/constants/rewards.ts`. Rewards are granted in check-in, meal, battle, and boss actions via `grantReward()` in `lib/reward-actions.ts`.
+
+### Achievement System
+
+20 static achievements in `web/src/lib/achievements.ts` (like characters/bosses pattern). `user_achievements` table tracks unlocks. `checkAchievements(userId, context)` runs after check-ins, battles, boss defeats. Categories: streak, exercise variety, social, calories, boss.
+
+### Mini-Games
+
+Exercise wheel + calorie quiz in `/games/`. Each limited to once daily via `last_wheel_date`/`last_quiz_date` on profiles. Server actions in `lib/game-actions.ts`.
+
+### Reward Shop
+
+Static items in `lib/shop-items.ts`. `purchases` table tracks buys. Monthly purchase limits enforced server-side. Streak revival costs 50 coins (2/month).
 
 ## Design System
 
