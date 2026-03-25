@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       } catch { /* ignore */ }
     }
 
-    const userEmail = email || `line.${lineUserId}@fitquest.app`;
+    let userEmail = email || `line.${lineUserId}@fitquest.app`;
     const userPassword = `LP_${lineUserId}_${process.env.LINE_CHANNEL_SECRET!.slice(0, 8)}`;
 
     // ── Step 3: Find or create user ──
@@ -92,8 +92,15 @@ export async function GET(request: NextRequest) {
 
     if (profileByLine) {
       userId = profileByLine.id;
-      // Ensure password is set for sign-in
-      await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+      const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+      if (pwError) {
+        return redirect(siteUrl, "line_password_update_failed", pwError.message);
+      }
+      // Get actual email from auth.users (may differ from LINE response)
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (authUser?.user?.email) {
+        userEmail = authUser.user.email;
+      }
     }
 
     // 3b: Check by email in profiles (user might exist from previous attempt without line_user_id)
@@ -106,7 +113,15 @@ export async function GET(request: NextRequest) {
 
       if (profileByEmail) {
         userId = profileByEmail.id;
-        await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+        const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
+        if (pwError) {
+          return redirect(siteUrl, "line_password_update_failed", pwError.message);
+        }
+        // Get actual email from auth.users (may differ from profiles table)
+        const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authUser?.user?.email) {
+          userEmail = authUser.user.email;
+        }
         await supabaseAdmin
           .from("profiles")
           .update({ line_user_id: lineUserId, nickname: displayName, avatar_url: pictureUrl || null })
