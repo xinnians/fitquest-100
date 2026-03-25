@@ -46,6 +46,22 @@ export function FeedCard({
         return <p>加入了挑戰！🎉</p>;
       case "battle_start":
         return <p>發起了一場 PK 對戰 ⚔️</p>;
+      case "battle_result": {
+        const winnerId = content.winner_id as string | null;
+        const cScore = content.challenger_score as number;
+        const oScore = content.opponent_score as number;
+        const metricLabel = (content.metric as string) === "check_ins" ? "打卡次數" : "卡路里";
+        return (
+          <p>
+            PK 對戰結束！
+            {winnerId === null ? " 🤝 平手" : " 🏆 "}
+            <span className="font-bold text-primary">
+              {cScore} vs {oScore}
+            </span>{" "}
+            {metricLabel}
+          </p>
+        );
+      }
       case "battle_end":
         return <p>完成了一場 PK 對戰 🏆</p>;
       default:

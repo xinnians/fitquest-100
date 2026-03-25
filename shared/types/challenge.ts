@@ -28,3 +28,5 @@ export interface LeaderboardEntry {
   total_check_ins: number;
   total_calories: number;
 }
+
+export type LeaderboardRange = "daily" | "weekly" | "total";

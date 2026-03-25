@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   getBattleDetail,
   respondBattle,
+  createRematch,
   getCurrentUserId,
 } from "@/lib/battle-actions";
 
@@ -18,12 +19,14 @@ interface BattleDetail {
     status: string;
     start_date: string;
     end_date: string;
+    winner_id: string | null;
     stake_description: string | null;
     challenger: { id: string; nickname: string | null } | null;
     opponent: { id: string; nickname: string | null } | null;
   };
   challenger_score: number;
   opponent_score: number;
+  days_remaining: number;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
@@ -87,12 +90,22 @@ export default function BattleDetailPage() {
       if (result.error) {
         setError(result.error);
       } else {
-        // Reload detail
         const detailResult = await getBattleDetail(battleId);
         if (detailResult.data) {
           setData(detailResult.data as BattleDetail);
         }
         router.refresh();
+      }
+    });
+  }
+
+  function handleRematch() {
+    startTransition(async () => {
+      const result = await createRematch(battleId);
+      if (result.error) {
+        setError(result.error);
+      } else if (result.data) {
+        router.push(`/battles/${result.data.id}`);
       }
     });
   }
@@ -121,14 +134,13 @@ export default function BattleDetailPage() {
 
   if (!data) return null;
 
-  const { battle, challenger_score, opponent_score } = data;
+  const { battle, challenger_score, opponent_score, days_remaining } = data;
   const statusInfo = STATUS_MAP[battle.status] ?? STATUS_MAP.pending;
   const metricLabel =
     battle.metric === "check_ins" ? "打卡次數" : "卡路里消耗";
   const metricUnit = battle.metric === "check_ins" ? "次" : "kcal";
 
-  const challengerName =
-    battle.challenger?.nickname ?? "匿名冒險者";
+  const challengerName = battle.challenger?.nickname ?? "匿名冒險者";
   const opponentName = battle.opponent?.nickname ?? "匿名冒險者";
 
   const challengerWinning = challenger_score > opponent_score;
@@ -137,6 +149,24 @@ export default function BattleDetailPage() {
 
   const isOpponent = currentUserId === battle.opponent_id;
   const canRespond = battle.status === "pending" && isOpponent;
+  const isCompleted = battle.status === "completed";
+
+  // Determine winner info for completed battles
+  const winnerName =
+    battle.winner_id === battle.challenger_id
+      ? challengerName
+      : battle.winner_id === battle.opponent_id
+        ? opponentName
+        : null;
+  const isDraw = isCompleted && battle.winner_id === null;
+  const currentUserWon = isCompleted && battle.winner_id === currentUserId;
+  const currentUserLost =
+    isCompleted && battle.winner_id !== null && battle.winner_id !== currentUserId;
+
+  // Progress bar for active battles (7 days total)
+  const totalDays = 7;
+  const elapsedDays = totalDays - days_remaining;
+  const progressPct = Math.min(100, (elapsedDays / totalDays) * 100);
 
   return (
     <main className="mx-auto max-w-md px-4 pb-8 pt-8">
@@ -147,6 +177,38 @@ export default function BattleDetailPage() {
       >
         <span>&#8592;</span> 返回對戰列表
       </Link>
+
+      {/* Winner Banner (completed battles) */}
+      {isCompleted && (
+        <div
+          className={`mb-4 rounded-xl p-4 text-center ${
+            isDraw
+              ? "border border-border bg-muted/10"
+              : currentUserWon
+                ? "border border-accent/30 bg-accent/10"
+                : "border border-destructive/30 bg-destructive/10"
+          }`}
+        >
+          <span className="text-3xl">
+            {isDraw ? "🤝" : currentUserWon ? "🏆" : "😤"}
+          </span>
+          <p className="mt-2 font-heading text-lg font-extrabold">
+            {isDraw
+              ? "平手！"
+              : currentUserWon
+                ? "恭喜你贏了！"
+                : `${winnerName} 獲勝！`}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {challenger_score} vs {opponent_score} {metricUnit}
+          </p>
+          {battle.stake_description && !isDraw && (
+            <p className="mt-2 text-sm font-medium text-primary">
+              🎯 賭注：{battle.stake_description}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Status badge */}
       <div className="mb-6 flex items-center justify-between">
@@ -159,6 +221,24 @@ export default function BattleDetailPage() {
           {statusInfo.label}
         </span>
       </div>
+
+      {/* Days Remaining Progress (active battles) */}
+      {battle.status === "active" && (
+        <div className="mb-4 rounded-xl border border-border bg-card p-4 shadow-card">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-muted">比拼進度</span>
+            <span className="font-medium">
+              {days_remaining > 0 ? `剩餘 ${days_remaining} 天` : "今天結算"}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-border">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Player Cards */}
       <section className="rounded-xl border border-border bg-card p-5 shadow-card">
@@ -175,9 +255,14 @@ export default function BattleDetailPage() {
                 : "border-border"
             }`}
           >
-            {challengerWinning && (
+            {challengerWinning && !isCompleted && (
               <span className="mb-1 text-xs font-bold text-primary">
                 領先
+              </span>
+            )}
+            {isCompleted && battle.winner_id === battle.challenger_id && (
+              <span className="mb-1 text-xs font-bold text-accent">
+                🏆 勝利
               </span>
             )}
             <span className="text-2xl">🏋️</span>
@@ -207,9 +292,14 @@ export default function BattleDetailPage() {
                 : "border-border"
             }`}
           >
-            {opponentWinning && (
+            {opponentWinning && !isCompleted && (
               <span className="mb-1 text-xs font-bold text-primary">
                 領先
+              </span>
+            )}
+            {isCompleted && battle.winner_id === battle.opponent_id && (
+              <span className="mb-1 text-xs font-bold text-accent">
+                🏆 勝利
               </span>
             )}
             <span className="text-2xl">🏃</span>
@@ -280,6 +370,17 @@ export default function BattleDetailPage() {
             </button>
           </div>
         </section>
+      )}
+
+      {/* Rematch button for completed battles */}
+      {isCompleted && (
+        <button
+          onClick={handleRematch}
+          disabled={isPending}
+          className="mt-4 w-full rounded-xl border border-primary bg-primary/10 px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+        >
+          {isPending ? "建立中..." : "🔄 再來一局"}
+        </button>
       )}
     </main>
   );

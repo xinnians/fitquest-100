@@ -205,7 +205,10 @@ export async function getChallengeDetail(challengeId: string) {
   };
 }
 
-export async function getChallengeLeaderboard(challengeId: string) {
+export async function getChallengeLeaderboard(
+  challengeId: string,
+  range: "daily" | "weekly" | "total" = "total"
+) {
   const supabase = await createClient();
 
   const {
@@ -237,11 +240,29 @@ export async function getChallengeLeaderboard(challengeId: string) {
 
   const userIds = members.map((m) => m.user_id);
 
+  // Determine date range based on filter
+  let rangeStart: string;
+  const now = new Date();
+  const taipeiDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+
+  if (range === "daily") {
+    rangeStart = taipeiDate.toLocaleDateString("en-CA");
+  } else if (range === "weekly") {
+    // Get Monday of current week (Asia/Taipei)
+    const day = taipeiDate.getDay();
+    const diff = day === 0 ? 6 : day - 1; // Monday = 0 offset
+    const monday = new Date(taipeiDate);
+    monday.setDate(taipeiDate.getDate() - diff);
+    rangeStart = monday.toLocaleDateString("en-CA");
+  } else {
+    rangeStart = challenge.start_date;
+  }
+
   const { data: checkIns } = await supabase
     .from("check_ins")
     .select("user_id, calories_burned")
     .in("user_id", userIds)
-    .gte("checked_in_at", challenge.start_date);
+    .gte("checked_in_at", `${rangeStart}T00:00:00+08:00`);
 
   const statsMap: Record<string, { total_check_ins: number; total_calories_burned: number }> = {};
   for (const uid of userIds) {

@@ -6,6 +6,8 @@ import { InviteCodeDisplay } from "@/components/features/invite-code-display";
 import { Leaderboard } from "@/components/features/leaderboard";
 import { FeedCard } from "@/components/features/feed-card";
 import { toggleLike } from "@/lib/feed-actions";
+import { getChallengeLeaderboard } from "@/lib/challenge-actions";
+import type { LeaderboardRange } from "shared/types/challenge";
 
 interface Member {
   user_id: string;
@@ -48,6 +50,7 @@ interface FeedItem {
 
 interface DetailClientProps {
   challenge: Challenge;
+  challengeId: string;
   leaderboard: LeaderboardEntry[];
   feed: FeedItem[];
 }
@@ -56,6 +59,7 @@ type Tab = "leaderboard" | "feed";
 
 export function DetailClient({
   challenge,
+  challengeId,
   leaderboard,
   feed,
 }: DetailClientProps) {
@@ -140,7 +144,20 @@ export function DetailClient({
       <div className="mt-4">
         {activeTab === "leaderboard" && (
           <section className="rounded-xl border border-border bg-card p-5 shadow-card">
-            <Leaderboard entries={leaderboardEntries} />
+            <Leaderboard
+              entries={leaderboardEntries}
+              showRangeTabs
+              onRangeChange={async (range: LeaderboardRange) => {
+                const result = await getChallengeLeaderboard(challengeId, range);
+                if ("data" in result && result.data) {
+                  return result.data.map((e) => ({
+                    ...e,
+                    nickname: e.nickname ?? "匿名",
+                  }));
+                }
+                return [];
+              }}
+            />
           </section>
         )}
 

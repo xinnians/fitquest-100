@@ -1,6 +1,121 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { BattleStats } from "shared/types/battle";
+
+// Helper: get today's date string in YYYY-MM-DD (Asia/Taipei)
+function getTodayDateString(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+// Helper: calculate scores for a battle
+async function calculateBattleScores(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  battle: { challenger_id: string; opponent_id: string; metric: string; start_date: string; end_date: string }
+) {
+  let challengerScore = 0;
+  let opponentScore = 0;
+
+  if (battle.metric === "check_ins") {
+    const [challengerResult, opponentResult] = await Promise.all([
+      supabase
+        .from("check_ins")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", battle.challenger_id)
+        .gte("checked_in_at", `${battle.start_date}T00:00:00+08:00`)
+        .lte("checked_in_at", `${battle.end_date}T23:59:59+08:00`),
+      supabase
+        .from("check_ins")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", battle.opponent_id)
+        .gte("checked_in_at", `${battle.start_date}T00:00:00+08:00`)
+        .lte("checked_in_at", `${battle.end_date}T23:59:59+08:00`),
+    ]);
+    challengerScore = challengerResult.count ?? 0;
+    opponentScore = opponentResult.count ?? 0;
+  } else if (battle.metric === "calories") {
+    const [challengerResult, opponentResult] = await Promise.all([
+      supabase
+        .from("check_ins")
+        .select("calories_burned")
+        .eq("user_id", battle.challenger_id)
+        .gte("checked_in_at", `${battle.start_date}T00:00:00+08:00`)
+        .lte("checked_in_at", `${battle.end_date}T23:59:59+08:00`),
+      supabase
+        .from("check_ins")
+        .select("calories_burned")
+        .eq("user_id", battle.opponent_id)
+        .gte("checked_in_at", `${battle.start_date}T00:00:00+08:00`)
+        .lte("checked_in_at", `${battle.end_date}T23:59:59+08:00`),
+    ]);
+    challengerScore = (challengerResult.data ?? []).reduce(
+      (sum, row) => sum + (row.calories_burned ?? 0),
+      0
+    );
+    opponentScore = (opponentResult.data ?? []).reduce(
+      (sum, row) => sum + (row.calories_burned ?? 0),
+      0
+    );
+  }
+
+  return { challengerScore, opponentScore };
+}
+
+// Complete a battle if its end_date has passed and it's still active
+async function completeBattleIfExpired(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  battleId: string
+) {
+  const { data: battle } = await supabase
+    .from("battles")
+    .select("*")
+    .eq("id", battleId)
+    .eq("status", "active")
+    .single();
+
+  if (!battle) return null;
+
+  const today = getTodayDateString();
+  if (battle.end_date >= today) return null;
+
+  const { challengerScore, opponentScore } = await calculateBattleScores(supabase, battle);
+
+  let winnerId: string | null = null;
+  if (challengerScore > opponentScore) winnerId = battle.challenger_id;
+  else if (opponentScore > challengerScore) winnerId = battle.opponent_id;
+  // null = draw
+
+  const { error } = await supabase
+    .from("battles")
+    .update({ status: "completed", winner_id: winnerId })
+    .eq("id", battleId)
+    .eq("status", "active"); // idempotent guard
+
+  if (error) return null;
+
+  // Create feed item for battle result (if linked to a challenge)
+  if (battle.challenge_id) {
+    await supabase.from("feed_items").insert({
+      user_id: battle.challenger_id,
+      challenge_id: battle.challenge_id,
+      type: "battle_result",
+      content: {
+        battle_id: battle.id,
+        challenger_id: battle.challenger_id,
+        opponent_id: battle.opponent_id,
+        metric: battle.metric,
+        challenger_score: challengerScore,
+        opponent_score: opponentScore,
+        winner_id: winnerId,
+        stake_description: battle.stake_description,
+      },
+    });
+  }
+
+  // TODO: grantBattleReward(winnerId, 300, 30) — when XP system is built
+
+  return { winnerId, challengerScore, opponentScore };
+}
 
 export async function createBattle(formData: FormData) {
   const supabase = await createClient();
@@ -29,9 +144,10 @@ export async function createBattle(formData: FormData) {
     return { error: "不能向自己發起挑戰" };
   }
 
-  const today = new Date();
-  const endDate = new Date(today);
+  const today = getTodayDateString();
+  const endDate = new Date(`${today}T00:00:00+08:00`);
   endDate.setDate(endDate.getDate() + 7);
+  const endDateStr = endDate.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 
   const { data, error } = await supabase
     .from("battles")
@@ -40,8 +156,8 @@ export async function createBattle(formData: FormData) {
       opponent_id: opponentId,
       metric,
       stake_description: stakeDescription,
-      start_date: today.toISOString().split("T")[0],
-      end_date: endDate.toISOString().split("T")[0],
+      start_date: today,
+      end_date: endDateStr,
       status: "pending",
     })
     .select()
@@ -65,10 +181,9 @@ export async function respondBattle(battleId: string, accept: boolean) {
     return { error: "請先登入" };
   }
 
-  // Fetch the battle to verify the current user is the opponent
   const { data: battle, error: fetchError } = await supabase
     .from("battles")
-    .select("opponent_id, status")
+    .select("opponent_id, status, challenge_id, challenger_id, metric")
     .eq("id", battleId)
     .single();
 
@@ -84,15 +199,46 @@ export async function respondBattle(battleId: string, accept: boolean) {
     return { error: "此對戰已經被回應過了" };
   }
 
-  const newStatus = accept ? "active" : "declined";
+  if (!accept) {
+    const { error } = await supabase
+      .from("battles")
+      .update({ status: "declined" })
+      .eq("id", battleId);
+
+    if (error) return { error: error.message };
+    return { success: true };
+  }
+
+  // Accept: reset start_date to today, end_date to today + 7
+  const today = getTodayDateString();
+  const endDate = new Date(`${today}T00:00:00+08:00`);
+  endDate.setDate(endDate.getDate() + 7);
+  const endDateStr = endDate.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 
   const { error } = await supabase
     .from("battles")
-    .update({ status: newStatus })
+    .update({
+      status: "active",
+      start_date: today,
+      end_date: endDateStr,
+    })
     .eq("id", battleId);
 
-  if (error) {
-    return { error: error.message };
+  if (error) return { error: error.message };
+
+  // Create feed item for battle start
+  if (battle.challenge_id) {
+    await supabase.from("feed_items").insert({
+      user_id: battle.challenger_id,
+      challenge_id: battle.challenge_id,
+      type: "battle_start",
+      content: {
+        battle_id: battleId,
+        challenger_id: battle.challenger_id,
+        opponent_id: battle.opponent_id,
+        metric: battle.metric,
+      },
+    });
   }
 
   return { success: true };
@@ -125,7 +271,18 @@ export async function getMyBattles() {
     return { error: error.message };
   }
 
-  return { success: true, data: data ?? [] };
+  const battles = data ?? [];
+
+  // Auto-complete any expired active battles
+  const today = getTodayDateString();
+  for (const b of battles) {
+    if (b.status === "active" && b.end_date < today) {
+      await completeBattleIfExpired(supabase, b.id);
+      b.status = "completed";
+    }
+  }
+
+  return { success: true, data: battles };
 }
 
 export async function getBattleDetail(battleId: string) {
@@ -138,6 +295,9 @@ export async function getBattleDetail(battleId: string) {
   if (!user) {
     return { error: "請先登入" };
   }
+
+  // Auto-complete if expired
+  await completeBattleIfExpired(supabase, battleId);
 
   // Fetch battle with profile info
   const { data: battle, error: battleError } = await supabase
@@ -156,56 +316,12 @@ export async function getBattleDetail(battleId: string) {
     return { error: "找不到此對戰" };
   }
 
-  // Calculate scores based on check_ins within the battle date range
-  const startDate = battle.start_date;
-  const endDate = battle.end_date;
+  const { challengerScore, opponentScore } = await calculateBattleScores(supabase, battle);
 
-  let challengerScore = 0;
-  let opponentScore = 0;
-
-  if (battle.metric === "check_ins") {
-    const [challengerResult, opponentResult] = await Promise.all([
-      supabase
-        .from("check_ins")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", battle.challenger_id)
-        .gte("checked_in_at", `${startDate}T00:00:00`)
-        .lte("checked_in_at", `${endDate}T23:59:59`),
-      supabase
-        .from("check_ins")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", battle.opponent_id)
-        .gte("checked_in_at", `${startDate}T00:00:00`)
-        .lte("checked_in_at", `${endDate}T23:59:59`),
-    ]);
-
-    challengerScore = challengerResult.count ?? 0;
-    opponentScore = opponentResult.count ?? 0;
-  } else if (battle.metric === "calories") {
-    const [challengerResult, opponentResult] = await Promise.all([
-      supabase
-        .from("check_ins")
-        .select("calories_burned")
-        .eq("user_id", battle.challenger_id)
-        .gte("checked_in_at", `${startDate}T00:00:00`)
-        .lte("checked_in_at", `${endDate}T23:59:59`),
-      supabase
-        .from("check_ins")
-        .select("calories_burned")
-        .eq("user_id", battle.opponent_id)
-        .gte("checked_in_at", `${startDate}T00:00:00`)
-        .lte("checked_in_at", `${endDate}T23:59:59`),
-    ]);
-
-    challengerScore = (challengerResult.data ?? []).reduce(
-      (sum, row) => sum + (row.calories_burned ?? 0),
-      0
-    );
-    opponentScore = (opponentResult.data ?? []).reduce(
-      (sum, row) => sum + (row.calories_burned ?? 0),
-      0
-    );
-  }
+  // Calculate days remaining
+  const today = new Date(getTodayDateString());
+  const endDate = new Date(battle.end_date);
+  const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
   return {
     success: true,
@@ -213,8 +329,94 @@ export async function getBattleDetail(battleId: string) {
       battle,
       challenger_score: challengerScore,
       opponent_score: opponentScore,
+      days_remaining: daysRemaining,
     },
   };
+}
+
+export async function getBattleStats(): Promise<{ success: true; data: BattleStats } | { error: string }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "請先登入" };
+  }
+
+  const { data: battles } = await supabase
+    .from("battles")
+    .select("winner_id, challenger_id, opponent_id")
+    .eq("status", "completed")
+    .or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`);
+
+  const stats: BattleStats = { wins: 0, losses: 0, draws: 0 };
+
+  for (const b of battles ?? []) {
+    if (b.winner_id === null) {
+      stats.draws++;
+    } else if (b.winner_id === user.id) {
+      stats.wins++;
+    } else {
+      stats.losses++;
+    }
+  }
+
+  return { success: true, data: stats };
+}
+
+export async function createRematch(battleId: string) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "請先登入" };
+  }
+
+  const { data: original } = await supabase
+    .from("battles")
+    .select("challenger_id, opponent_id, metric, stake_description, challenge_id")
+    .eq("id", battleId)
+    .single();
+
+  if (!original) {
+    return { error: "找不到原對戰" };
+  }
+
+  // Determine opponent (the other person)
+  const opponentId = original.challenger_id === user.id
+    ? original.opponent_id
+    : original.challenger_id;
+
+  const today = getTodayDateString();
+  const endDate = new Date(`${today}T00:00:00+08:00`);
+  endDate.setDate(endDate.getDate() + 7);
+  const endDateStr = endDate.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+
+  const { data, error } = await supabase
+    .from("battles")
+    .insert({
+      challenger_id: user.id,
+      opponent_id: opponentId,
+      challenge_id: original.challenge_id,
+      metric: original.metric,
+      stake_description: original.stake_description,
+      start_date: today,
+      end_date: endDateStr,
+      status: "pending",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true, data };
 }
 
 export async function getPotentialOpponents() {
@@ -228,7 +430,6 @@ export async function getPotentialOpponents() {
     return { error: "請先登入", data: [] };
   }
 
-  // Get all challenges the user is a member of
   const { data: memberships } = await supabase
     .from("challenge_members")
     .select("challenge_id")
@@ -240,7 +441,6 @@ export async function getPotentialOpponents() {
 
   const challengeIds = memberships.map((m) => m.challenge_id);
 
-  // Get all members of those challenges (excluding current user)
   const { data: members } = await supabase
     .from("challenge_members")
     .select("user_id, profiles(id, nickname)")
@@ -251,7 +451,6 @@ export async function getPotentialOpponents() {
     return { success: true, data: [] };
   }
 
-  // Deduplicate by user_id
   const seen = new Set<string>();
   const uniqueMembers = members.filter((m) => {
     if (seen.has(m.user_id)) return false;

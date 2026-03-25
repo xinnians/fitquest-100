@@ -40,6 +40,7 @@ export default async function ChallengeDetailPage({
     <main className="mx-auto max-w-md px-4 pb-8 pt-8">
       <DetailClient
         challenge={challenge}
+        challengeId={challengeId}
         leaderboard={leaderboard}
         feed={feed}
       />

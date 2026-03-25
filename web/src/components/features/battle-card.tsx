@@ -6,6 +6,10 @@ interface BattleCardProps {
   id: string;
   challengerName: string;
   opponentName: string;
+  challengerId?: string;
+  opponentId?: string;
+  winnerId?: string | null;
+  currentUserId?: string | null;
   metric: "check_ins" | "calories";
   status: string;
   startDate: string;
@@ -24,6 +28,10 @@ export function BattleCard({
   id,
   challengerName,
   opponentName,
+  challengerId,
+  opponentId,
+  winnerId,
+  currentUserId,
   metric,
   status,
   startDate,
@@ -31,6 +39,18 @@ export function BattleCard({
   stakeDescription,
 }: BattleCardProps) {
   const statusInfo = STATUS_MAP[status] ?? STATUS_MAP.pending;
+
+  // Winner/loser badge for completed battles
+  let resultBadge: string | null = null;
+  if (status === "completed" && currentUserId) {
+    if (winnerId === null) {
+      resultBadge = "🤝 平手";
+    } else if (winnerId === currentUserId) {
+      resultBadge = "🏆 勝利";
+    } else {
+      resultBadge = "😤 落敗";
+    }
+  }
 
   return (
     <Link
@@ -49,9 +69,18 @@ export function BattleCard({
             </p>
           </div>
         </div>
-        <span className={`text-xs font-medium ${statusInfo.color}`}>
-          {statusInfo.label}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`text-xs font-medium ${statusInfo.color}`}>
+            {statusInfo.label}
+          </span>
+          {resultBadge && (
+            <span className={`text-xs font-bold ${
+              winnerId === currentUserId ? "text-accent" : winnerId === null ? "text-muted" : "text-destructive"
+            }`}>
+              {resultBadge}
+            </span>
+          )}
+        </div>
       </div>
       <div className="mt-2 flex items-center gap-4 text-xs text-muted">
         <span>

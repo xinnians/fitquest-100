@@ -16,6 +16,19 @@ export interface Battle {
 }
 
 export interface BattleWithProfiles extends Battle {
-  challenger: { nickname: string; avatar_url: string | null };
-  opponent: { nickname: string; avatar_url: string | null };
+  challenger: { id: string; nickname: string; avatar_url: string | null };
+  opponent: { id: string; nickname: string; avatar_url: string | null };
+}
+
+export interface BattleDetailWithScores {
+  battle: BattleWithProfiles;
+  challenger_score: number;
+  opponent_score: number;
+  days_remaining: number;
+}
+
+export interface BattleStats {
+  wins: number;
+  losses: number;
+  draws: number;
 }

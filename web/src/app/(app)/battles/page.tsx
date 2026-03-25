@@ -6,8 +6,12 @@ import {
   getMyBattles,
   createBattle,
   getPotentialOpponents,
+  getBattleStats,
+  respondBattle,
+  getCurrentUserId,
 } from "@/lib/battle-actions";
 import { BattleCard } from "@/components/features/battle-card";
+import type { BattleStats } from "shared/types/battle";
 
 interface Battle {
   id: string;
@@ -17,6 +21,7 @@ interface Battle {
   status: string;
   start_date: string;
   end_date: string;
+  winner_id: string | null;
   stake_description: string | null;
   challenger: { id: string; nickname: string | null } | null;
   opponent: { id: string; nickname: string | null } | null;
@@ -31,6 +36,8 @@ export default function BattlesPage() {
   const router = useRouter();
   const [battles, setBattles] = useState<Battle[]>([]);
   const [opponents, setOpponents] = useState<Opponent[]>([]);
+  const [stats, setStats] = useState<BattleStats | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
@@ -38,9 +45,11 @@ export default function BattlesPage() {
 
   useEffect(() => {
     async function loadData() {
-      const [battlesResult, opponentsResult] = await Promise.all([
+      const [battlesResult, opponentsResult, statsResult, userId] = await Promise.all([
         getMyBattles(),
         getPotentialOpponents(),
+        getBattleStats(),
+        getCurrentUserId(),
       ]);
 
       if (battlesResult.data) {
@@ -49,6 +58,10 @@ export default function BattlesPage() {
       if (opponentsResult.data) {
         setOpponents(opponentsResult.data);
       }
+      if ("data" in statsResult && statsResult.data) {
+        setStats(statsResult.data);
+      }
+      setCurrentUserId(userId);
       setLoading(false);
     }
 
@@ -64,7 +77,6 @@ export default function BattlesPage() {
         setError(result.error);
       } else {
         setShowForm(false);
-        // Reload battles
         const battlesResult = await getMyBattles();
         if (battlesResult.data) {
           setBattles(battlesResult.data as Battle[]);
@@ -74,10 +86,29 @@ export default function BattlesPage() {
     });
   }
 
+  function handleInlineRespond(battleId: string, accept: boolean) {
+    startTransition(async () => {
+      const result = await respondBattle(battleId, accept);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        const [battlesResult, statsResult] = await Promise.all([
+          getMyBattles(),
+          getBattleStats(),
+        ]);
+        if (battlesResult.data) {
+          setBattles(battlesResult.data as Battle[]);
+        }
+        if ("data" in statsResult && statsResult.data) {
+          setStats(statsResult.data);
+        }
+        router.refresh();
+      }
+    });
+  }
+
   const activeBattles = battles.filter((b) => b.status === "active");
-  const pendingBattles = battles.filter(
-    (b) => b.status === "pending"
-  );
+  const pendingBattles = battles.filter((b) => b.status === "pending");
   const finishedBattles = battles.filter(
     (b) => b.status === "completed" || b.status === "declined"
   );
@@ -103,6 +134,24 @@ export default function BattlesPage() {
         </button>
       </div>
 
+      {/* Battle Stats */}
+      {stats && (stats.wins > 0 || stats.losses > 0 || stats.draws > 0) && (
+        <div className="mt-4 flex items-center justify-center gap-6 rounded-xl border border-border bg-card p-3 shadow-card">
+          <div className="text-center">
+            <p className="font-heading text-xl font-extrabold text-accent">{stats.wins}</p>
+            <p className="text-xs text-muted">勝</p>
+          </div>
+          <div className="text-center">
+            <p className="font-heading text-xl font-extrabold text-destructive">{stats.losses}</p>
+            <p className="text-xs text-muted">敗</p>
+          </div>
+          <div className="text-center">
+            <p className="font-heading text-xl font-extrabold text-muted">{stats.draws}</p>
+            <p className="text-xs text-muted">平</p>
+          </div>
+        </div>
+      )}
+
       {/* Create Battle Form */}
       {showForm && (
         <section className="mt-6 rounded-xl border border-border bg-card p-5 shadow-card">
@@ -113,7 +162,6 @@ export default function BattlesPage() {
             </p>
           ) : (
             <form action={handleSubmit} className="space-y-4">
-              {/* Select opponent */}
               <div>
                 <label className="mb-1 block text-sm font-medium">
                   選擇對手
@@ -132,7 +180,6 @@ export default function BattlesPage() {
                 </select>
               </div>
 
-              {/* Select metric */}
               <div>
                 <label className="mb-1 block text-sm font-medium">
                   比拼指標
@@ -147,7 +194,6 @@ export default function BattlesPage() {
                 </select>
               </div>
 
-              {/* Stake description */}
               <div>
                 <label className="mb-1 block text-sm font-medium">
                   賭注描述（選填）
@@ -189,12 +235,12 @@ export default function BattlesPage() {
               <BattleCard
                 key={battle.id}
                 id={battle.id}
-                challengerName={
-                  battle.challenger?.nickname ?? "匿名冒險者"
-                }
-                opponentName={
-                  battle.opponent?.nickname ?? "匿名冒險者"
-                }
+                challengerName={battle.challenger?.nickname ?? "匿名冒險者"}
+                opponentName={battle.opponent?.nickname ?? "匿名冒險者"}
+                challengerId={battle.challenger_id}
+                opponentId={battle.opponent_id}
+                winnerId={battle.winner_id}
+                currentUserId={currentUserId}
                 metric={battle.metric}
                 status={battle.status}
                 startDate={battle.start_date}
@@ -215,23 +261,45 @@ export default function BattlesPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {pendingBattles.map((battle) => (
-              <BattleCard
-                key={battle.id}
-                id={battle.id}
-                challengerName={
-                  battle.challenger?.nickname ?? "匿名冒險者"
-                }
-                opponentName={
-                  battle.opponent?.nickname ?? "匿名冒險者"
-                }
-                metric={battle.metric}
-                status={battle.status}
-                startDate={battle.start_date}
-                endDate={battle.end_date}
-                stakeDescription={battle.stake_description}
-              />
-            ))}
+            {pendingBattles.map((battle) => {
+              const isOpponent = currentUserId === battle.opponent_id;
+              return (
+                <div key={battle.id}>
+                  <BattleCard
+                    id={battle.id}
+                    challengerName={battle.challenger?.nickname ?? "匿名冒險者"}
+                    opponentName={battle.opponent?.nickname ?? "匿名冒險者"}
+                    challengerId={battle.challenger_id}
+                    opponentId={battle.opponent_id}
+                    winnerId={battle.winner_id}
+                    currentUserId={currentUserId}
+                    metric={battle.metric}
+                    status={battle.status}
+                    startDate={battle.start_date}
+                    endDate={battle.end_date}
+                    stakeDescription={battle.stake_description}
+                  />
+                  {isOpponent && (
+                    <div className="mt-2 flex gap-2 px-1">
+                      <button
+                        onClick={() => handleInlineRespond(battle.id, false)}
+                        disabled={isPending}
+                        className="flex-1 rounded-lg border border-border px-3 py-2 text-xs font-bold transition-colors hover:bg-muted/10 disabled:opacity-50"
+                      >
+                        婉拒
+                      </button>
+                      <button
+                        onClick={() => handleInlineRespond(battle.id, true)}
+                        disabled={isPending}
+                        className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        接受挑戰
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -249,12 +317,12 @@ export default function BattlesPage() {
               <BattleCard
                 key={battle.id}
                 id={battle.id}
-                challengerName={
-                  battle.challenger?.nickname ?? "匿名冒險者"
-                }
-                opponentName={
-                  battle.opponent?.nickname ?? "匿名冒險者"
-                }
+                challengerName={battle.challenger?.nickname ?? "匿名冒險者"}
+                opponentName={battle.opponent?.nickname ?? "匿名冒險者"}
+                challengerId={battle.challenger_id}
+                opponentId={battle.opponent_id}
+                winnerId={battle.winner_id}
+                currentUserId={currentUserId}
                 metric={battle.metric}
                 status={battle.status}
                 startDate={battle.start_date}
