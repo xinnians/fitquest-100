@@ -141,8 +141,9 @@ export async function GET(request: NextRequest) {
       if (createError) {
         // User exists in auth.users but wasn't found via profiles lookup
         // Find existing auth user and link LINE identity
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-        const existingUser = listData?.users?.find((u) => u.email === userEmail);
+        const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const emailLower = userEmail.toLowerCase();
+        const existingUser = listData?.users?.find((u) => u.email?.toLowerCase() === emailLower);
         if (existingUser) {
           userId = existingUser.id;
           const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: userPassword });
@@ -158,7 +159,9 @@ export async function GET(request: NextRequest) {
               { onConflict: "id" }
             );
         } else {
-          return redirect(siteUrl, "line_create_failed", createError.message);
+          const count = listData?.users?.length ?? "null";
+          const detail = `${createError.message} | listUsers: ${listError?.message ?? "ok"}, count=${count}, searching=${userEmail}`;
+          return redirect(siteUrl, "line_create_failed", detail);
         }
       } else if (!newUser.user) {
         return redirect(siteUrl, "line_create_failed", "createUser returned null");
