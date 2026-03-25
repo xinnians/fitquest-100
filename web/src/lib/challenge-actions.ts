@@ -39,8 +39,6 @@ export async function createChallenge(formData: FormData) {
     .select()
     .single();
 
-  console.log("[createChallenge] user:", user.id, "challenge insert:", { id: challenge?.id, error: error?.message });
-
   if (error) {
     return { error: error.message };
   }
@@ -51,8 +49,6 @@ export async function createChallenge(formData: FormData) {
       challenge_id: challenge.id,
       user_id: user.id,
     });
-
-  console.log("[createChallenge] member insert:", { challenge_id: challenge.id, error: memberError?.message });
 
   if (memberError) {
     return { error: memberError.message };
@@ -150,17 +146,12 @@ export async function getMyChallenges() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    console.log("[getMyChallenges] no user");
-    return [];
-  }
+  if (!user) return [];
 
-  const { data: memberships, error: membershipsError } = await supabase
+  const { data: memberships } = await supabase
     .from("challenge_members")
     .select("challenge_id, challenges(*)")
     .eq("user_id", user.id);
-
-  console.log("[getMyChallenges] user:", user.id, "memberships:", memberships?.length ?? 0, "error:", membershipsError?.message);
 
   if (!memberships || memberships.length === 0) return [];
 
