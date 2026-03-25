@@ -173,6 +173,8 @@ export async function getMyFeed() {
     .select("challenge_id")
     .eq("user_id", user.id);
 
+  console.log("[getMyFeed] memberships:", memberships?.length ?? 0, "error:", memberError?.message);
+
   if (memberError) {
     return { error: memberError.message };
   }
@@ -190,6 +192,8 @@ export async function getMyFeed() {
     .in("challenge_id", challengeIds)
     .order("created_at", { ascending: false })
     .limit(30);
+
+  console.log("[getMyFeed] feedItems:", feedItems?.length ?? 0, "error:", error?.message);
 
   if (error) {
     return { error: error.message };
