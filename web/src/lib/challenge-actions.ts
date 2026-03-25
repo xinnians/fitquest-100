@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateInviteCode } from "shared/utils/invite-code";
 
@@ -53,6 +54,7 @@ export async function createChallenge(formData: FormData) {
     return { error: memberError.message };
   }
 
+  revalidatePath("/challenges");
   return { success: true, data: challenge };
 }
 
@@ -109,6 +111,7 @@ export async function joinChallenge(inviteCode: string) {
     type: "join",
   });
 
+  revalidatePath("/challenges");
   return { success: true, data: challenge };
 }
 
