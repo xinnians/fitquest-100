@@ -111,8 +111,8 @@ export async function createCheckIn(formData: FormData) {
     streak
   );
 
-  // Check achievements (non-blocking)
-  checkAchievements(user.id, "check_in");
+  // Check achievements (deferred — don't block the check-in response)
+  setTimeout(() => checkAchievements(user.id, "check_in"), 0);
 
   return { success: true, data, reward };
 }

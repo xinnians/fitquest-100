@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { ACHIEVEMENTS, getAchievement } from "@/lib/achievements";
-import { grantReward } from "@/lib/reward-actions";
+import { grantReward, getCurrentStreak } from "@/lib/reward-actions";
 import { createNotification } from "@/lib/notification-actions";
 
 function getSupabaseAdmin() {
@@ -57,7 +57,7 @@ export async function checkAchievements(userId: string, context: AchievementCont
   const checks: Record<string, boolean> = {};
 
   if (toCheck.some((a) => a.category === "streak")) {
-    const streak = await getStreakCount(admin, userId);
+    const streak = await getCurrentStreak(userId);
     checks["streak_7"] = streak >= 7;
     checks["streak_14"] = streak >= 14;
     checks["streak_30"] = streak >= 30;
@@ -149,30 +149,6 @@ export async function getMyAchievements() {
 }
 
 // === Helper queries ===
-
-async function getStreakCount(admin: ReturnType<typeof getSupabaseAdmin>, userId: string): Promise<number> {
-  const today = new Date();
-  let streak = 0;
-  for (let i = 0; i < 200; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const { count } = await admin
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("checked_in_at", `${dateStr}T00:00:00`)
-      .lt("checked_in_at", `${dateStr}T23:59:59.999`);
-    if ((count ?? 0) > 0) {
-      streak++;
-    } else if (i === 0) {
-      continue;
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
 
 async function getUniqueExerciseTypes(admin: ReturnType<typeof getSupabaseAdmin>, userId: string): Promise<number> {
   const { data } = await admin

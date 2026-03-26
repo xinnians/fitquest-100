@@ -92,31 +92,44 @@ export async function getPlayerStats() {
 }
 
 /**
- * 取得用戶當前 streak 天數（用於計算加成）
+ * 取得用戶當前 streak 天數（1 query 版本）
+ * 一次撈所有打卡日期，在 JS 中計算連續天數
  */
 export async function getCurrentStreak(userId: string): Promise<number> {
   const admin = getSupabaseAdmin();
 
-  const today = new Date();
+  const { data } = await admin
+    .from("check_ins")
+    .select("checked_in_at")
+    .eq("user_id", userId)
+    .order("checked_in_at", { ascending: false });
+
+  if (!data || data.length === 0) return 0;
+
+  return calculateStreakFromDates(data.map((d) => d.checked_in_at));
+}
+
+/**
+ * 從打卡時間陣列計算連續天數（純 JS，無 DB）
+ */
+function calculateStreakFromDates(checkedInDates: string[]): number {
+  const dateSet = new Set(
+    checkedInDates.map((d) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" }))
+  );
+
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
   let streak = 0;
+  const checkDate = new Date(today + "T12:00:00+08:00");
+
+  if (!dateSet.has(today)) {
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
 
   for (let i = 0; i < 200; i++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - i);
-    const dateStr = checkDate.toISOString().slice(0, 10);
-
-    const { count } = await admin
-      .from("check_ins")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("checked_in_at", `${dateStr}T00:00:00`)
-      .lt("checked_in_at", `${dateStr}T23:59:59.999`);
-
-    if ((count ?? 0) > 0) {
+    const dateStr = checkDate.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+    if (dateSet.has(dateStr)) {
       streak++;
-    } else if (i === 0) {
-      // 今天還沒打卡也沒關係，往前看
-      continue;
+      checkDate.setDate(checkDate.getDate() - 1);
     } else {
       break;
     }

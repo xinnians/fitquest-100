@@ -6,8 +6,8 @@ import {
   getCalorieData,
   getWaffleData,
   getWeeklyData,
+  getPlayerStats,
 } from "@/lib/dashboard-data";
-import { getPlayerStats } from "@/lib/reward-actions";
 import { StreakDisplay } from "@/components/features/streak-display";
 import { CalorieGauge } from "@/components/features/calorie-gauge";
 import { WaffleChart } from "@/components/features/waffle-chart";

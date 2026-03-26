@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getUnreadNotifications, markNotificationsRead, getRecentNotifications } from "@/lib/notification-actions";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -29,15 +29,22 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
 
+  const lastFetchRef = useRef(0);
+
   const fetchUnreadCount = useCallback(async () => {
+    // Cache for 30 seconds to avoid excessive DB queries on route changes
+    const now = Date.now();
+    if (now - lastFetchRef.current < 30000) return;
+    lastFetchRef.current = now;
+
     const { unreadCount: count } = await getUnreadNotifications();
     setUnreadCount(count);
   }, []);
 
-  // Refetch on route change
+  // Fetch on mount only, not every route change
   useEffect(() => {
     fetchUnreadCount();
-  }, [pathname, fetchUnreadCount]);
+  }, [fetchUnreadCount]);
 
   async function handleOpen() {
     if (isOpen) {
